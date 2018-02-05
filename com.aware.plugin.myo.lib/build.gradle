@@ -1,11 +1,10 @@
-apply plugin: 'com.android.application'
+apply plugin: 'com.android.library'
 
 android {
     compileSdkVersion compile_sdk
     buildToolsVersion build_tools
 
     defaultConfig {
-        applicationId "com.aware.plugin.template" //EDIT ME
         minSdkVersion minimum_sdk
         targetSdkVersion target_sdk
         versionCode version_code
@@ -27,6 +26,14 @@ android {
     lintOptions {
         abortOnError false
     }
+
+    sourceSets {
+        main {
+            java.srcDirs += '../com.aware.plugin.myo/src/main/java'
+            res.srcDirs += '../com.aware.plugin.myo/src/main/res'
+            manifest.srcFile '../com.aware.plugin.myo/src/main/AndroidManifest.xml'
+        }
+    }
 }
 
 if (System.getenv("storeFile") != null && System.getenv("storePassword") != null && System.getenv("keyAlias") != null && System.getenv("keyPassword") != null) {
@@ -39,21 +46,37 @@ if (System.getenv("storeFile") != null && System.getenv("storePassword") != null
     android.buildTypes.release.signingConfig = null
 }
 
+task generateSourcesJar(type: Jar) {
+    from android.sourceSets.main.java.srcDirs
+    classifier 'sources'
+}
+
+task generateJavadocs(type: Javadoc) {
+    failOnError false
+    source = android.sourceSets.main.java.srcDirs
+    classpath += project.files(android.getBootClasspath().join(File.pathSeparator))
+}
+
+task generateJavadocsJar(type: Jar) {
+    from generateJavadocs.destinationDir
+    classifier 'javadoc'
+}
+
+generateJavadocsJar.dependsOn generateJavadocs
+
+artifacts {
+    archives generateJavadocsJar
+    archives generateSourcesJar
+}
+
 repositories {
     maven { url 'https://jitpack.io' } //this allows library generation directly from GitHub source-code
 }
-
 configurations.all {
     resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
 }
 
 dependencies {
-    //Parent AWARE libraries dependencies
-    implementation "org.eclipse.paho:org.eclipse.paho.client.mqttv3:$mqtt_libs"
-    implementation "com.koushikdutta.ion:ion:$ion_libs"
-    implementation "com.android.support:appcompat-v7:$support_libs"
-    implementation "com.android.support:gridlayout-v7:$support_libs"
-
     api "com.github.denzilferreira:aware-client:$aware_libs"
 
     repositories {
@@ -63,5 +86,4 @@ dependencies {
     }
 
     compile('com.thalmic:myosdk:0.10.+@aar')
-
 }

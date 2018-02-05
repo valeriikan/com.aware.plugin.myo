@@ -1,4 +1,4 @@
-package com.aware.plugin.template;
+package com.aware.plugin.myo;
 
 import android.content.BroadcastReceiver;
 import android.content.ContentValues;
@@ -76,6 +76,7 @@ public class ContextCard implements IContextCard {
         myofilter.addAction(Plugin.ACTION_PLUGIN_MYO_CONNECTED);
         myofilter.addAction(Plugin.ACTION_PLUGIN_MYO_DISCONNECTED);
         myofilter.addAction(Plugin.ACTION_PLUGIN_MYO_GYROSCOPE);
+        context.registerReceiver(myoListener, myofilter);
 
         //Return the card to AWARE/apps
         return card;
@@ -86,46 +87,34 @@ public class ContextCard implements IContextCard {
         @Override
         public void onReceive(Context context, Intent intent) {
             if (intent.getAction().equalsIgnoreCase(Plugin.ACTION_PLUGIN_MYO_CONNECTED)){
-                
+                macaddress = intent.getStringExtra(Plugin.MAC_ADDRESS);
+                connectBtn.setChecked(true);
+                connectBtn.setEnabled(true);
+                connectBtn.setVisibility(View.VISIBLE);
+                gyroX.setVisibility(View.VISIBLE);
+                gyroY.setVisibility(View.VISIBLE);
+                gyroZ.setVisibility(View.VISIBLE);
+                progress.setVisibility(View.INVISIBLE);
+                myoStatus.setText("Connected to " + macaddress);
             }
-            switch (intent.getAction()) {
-
-                case Plugin.ACTION_PLUGIN_MYO_CONNECTED: {
-                    macaddress = intent.getStringExtra(Plugin.MAC_ADDRESS);
-                    connectBtn.setChecked(true);
-                    connectBtn.setEnabled(true);
-                    connectBtn.setVisibility(View.VISIBLE);
-                    gyroX.setVisibility(View.VISIBLE);
-                    gyroY.setVisibility(View.VISIBLE);
-                    gyroZ.setVisibility(View.VISIBLE);
-                    progress.setVisibility(View.INVISIBLE);
-                    myoStatus.setText("Connected to " + macaddress);
-                    break;
-                }
-
-                case Plugin.ACTION_PLUGIN_MYO_DISCONNECTED: {
-                    connectBtn.setChecked(false);
-                    connectBtn.setEnabled(true);
-                    connectBtn.setVisibility(View.VISIBLE);
-                    gyroX.setVisibility(View.INVISIBLE);
-                    gyroY.setVisibility(View.INVISIBLE);
-                    gyroZ.setVisibility(View.INVISIBLE);
-                    progress.setVisibility(View.INVISIBLE);
-                    myoStatus.setText("Disconnected");
-                    break;
-                }
-
-                case Plugin.ACTION_PLUGIN_MYO_GYROSCOPE: {
-                    ContentValues gyro = intent.getParcelableExtra(Plugin.MYO_GYROVALUES);
-                    String x = gyro.getAsString("x");
-                    String y = gyro.getAsString("y");
-                    String z = gyro.getAsString("z");
-                    gyroX.setText(x);
-                    gyroY.setText(y);
-                    gyroZ.setText(z);
-                    break;
-                }
-
+            if (intent.getAction().equalsIgnoreCase(Plugin.ACTION_PLUGIN_MYO_DISCONNECTED)){
+                connectBtn.setChecked(false);
+                connectBtn.setEnabled(true);
+                connectBtn.setVisibility(View.VISIBLE);
+                gyroX.setVisibility(View.INVISIBLE);
+                gyroY.setVisibility(View.INVISIBLE);
+                gyroZ.setVisibility(View.INVISIBLE);
+                progress.setVisibility(View.INVISIBLE);
+                myoStatus.setText("Disconnected");
+            }
+            if (intent.getAction().equalsIgnoreCase(Plugin.ACTION_PLUGIN_MYO_GYROSCOPE)){
+                ContentValues gyro = intent.getParcelableExtra(Plugin.MYO_GYROVALUES);
+                String x = gyro.getAsString("x");
+                String y = gyro.getAsString("y");
+                String z = gyro.getAsString("z");
+                gyroX.setText(x);
+                gyroY.setText(y);
+                gyroZ.setText(z);
             }
         }
     }

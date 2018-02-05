@@ -1,4 +1,4 @@
-package com.aware.plugin.template;
+package com.aware.plugin.myo;
 
 import android.Manifest;
 import android.content.BroadcastReceiver;
