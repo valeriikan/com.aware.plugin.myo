@@ -23,6 +23,13 @@ import com.thalmic.myo.Vector3;
 import com.thalmic.myo.XDirection;
 
 public class Plugin extends Aware_Plugin {
+    
+    public static final String ACTION_PLUGIN_MYO_CONNECTED = "ACTION_PLUGIN_MYO_CONNECTED";
+    public static final String ACTION_PLUGIN_MYO_DISCONNECTED = "ACTION_PLUGIN_MYO_DISCONNECTED";
+    public static final String ACTION_PLUGIN_MYO_GYROSCOPE = "ACTION_PLUGIN_MYO_GYROSCOPE";
+    public static final String MAC_ADDRESS = "MAC_ADDRESS";
+    public static final String MYO_GYROVALUES = "MYO_GYROVALUES";
+    public static final String MYO_TAG = "MYO_TAG";
 
     @Override
     public void onCreate() {
@@ -65,7 +72,9 @@ public class Plugin extends Aware_Plugin {
     }
 
     public interface AWARESensorObserver {
-        void onDataChanged(ContentValues data);
+        void onMyoConnected(String macaddress);
+        void onMyoDisconnected();
+        void onMyoGyroscopeChanged(ContentValues data);
     }
 
     // Myo component
@@ -86,7 +95,31 @@ public class Plugin extends Aware_Plugin {
             //Initialise AWARE instance in plugin
             Aware.startAWARE(this);
 
-            setupMyo();
+            if (myoHub == null) {
+                setupMyo();
+            }
+
+            setSensorObserver(new AWARESensorObserver() {
+                @Override
+                public void onMyoConnected(String macaddress) {
+                    Intent myoConnected = new Intent(Plugin.ACTION_PLUGIN_MYO_CONNECTED);
+                    myoConnected.putExtra(Plugin.MAC_ADDRESS, macaddress);
+                    sendBroadcast(myoConnected);
+                }
+
+                @Override
+                public void onMyoDisconnected() {
+                    Intent myoDisconnected = new Intent(Plugin.ACTION_PLUGIN_MYO_DISCONNECTED);
+                    sendBroadcast(myoDisconnected);
+                }
+
+                @Override
+                public void onMyoGyroscopeChanged(ContentValues data) {
+                    Intent myoGyroscope = new Intent(Plugin.ACTION_PLUGIN_MYO_GYROSCOPE);
+                    myoGyroscope.putExtra(Plugin.MYO_GYROVALUES, data);
+                    sendBroadcast(myoGyroscope);
+                }
+            });
         }
 
         return START_STICKY;
@@ -117,88 +150,87 @@ public class Plugin extends Aware_Plugin {
     // Initializing Hub and attaching listener to it
     public void setupMyo() {
 
-        Log.wtf("AWAREMYO", "setupMyo started");
-        if (myoHub == null) {
+        Log.wtf(Plugin.MYO_TAG, "setupMyo started");
 
-            myoHub = Hub.getInstance();
-            myoHub.init(getApplicationContext());
+        myoHub = Hub.getInstance();
+        myoHub.init(getApplicationContext());
 
-            myoHub.addListener(new DeviceListener() {
-                @Override
-                public void onAttach(Myo myo, long l) {
-                    Log.wtf("AWAREMYO", "Attached to Myo:" + myo.toString());
-                }
+        myoHub.addListener(new DeviceListener() {
+            @Override
+            public void onAttach(Myo myo, long l) {
+                Log.wtf(Plugin.MYO_TAG, "Attached to Myo:" + myo.toString());
+            }
 
-                @Override
-                public void onDetach(Myo myo, long l) {
-                    Log.wtf("AWAREMYO", "Detached Myo:" + myo.toString());
-                }
+            @Override
+            public void onDetach(Myo myo, long l) {
+                Log.wtf(Plugin.MYO_TAG, "Detached Myo:" + myo.toString());
+            }
 
-                @Override
-                public void onConnect(Myo myo, long l) {
-                    Log.d("AWAREMYO", "Connected to Myo:" + myo.toString());
+            @Override
+            public void onConnect(Myo myo, long l) {
+                Log.d(Plugin.MYO_TAG, "Connected to Myo:" + myo.toString());
 
-                    Intent intent = new Intent("MYO_DATA");
-                    intent.putExtra("dataConnection", "connected");
-                    intent.putExtra("dataMac", myo.getMacAddress());
-                    sendBroadcast(intent);
-                }
+                if (awareSensor != null) awareSensor.onMyoConnected(myo.getMacAddress());
+            }
 
-                @Override
-                public void onDisconnect(Myo myo, long l) {
-                    Log.wtf("AWAREMYO", "Disconnected from Myo:" + myo.toString());
+            @Override
+            public void onDisconnect(Myo myo, long l) {
+                Log.wtf(Plugin.MYO_TAG, "Disconnected from Myo:" + myo.toString());
 
-                    Intent intent = new Intent("MYO_DATA");
-                    intent.putExtra("dataConnection", "disconnected");
-                    sendBroadcast(intent);
-                }
+                if (awareSensor != null) awareSensor.onMyoDisconnected();
+            }
 
-                @Override
-                public void onArmSync(Myo myo, long l, Arm arm, XDirection xDirection) {
-                    Log.wtf("AWAREMYO", "onArmSync: " + myo.toString());
-                }
+            @Override
+            public void onArmSync(Myo myo, long l, Arm arm, XDirection xDirection) {
+               // Log.wtf(Plugin.MYO_TAG, "onArmSync: " + myo.toString());
+            }
 
-                @Override
-                public void onArmUnsync(Myo myo, long l) {
-                    Log.wtf("AWAREMYO", "onArmUnsync: " + myo.toString());
-                }
+            @Override
+            public void onArmUnsync(Myo myo, long l) {
+                //Log.wtf(Plugin.MYO_TAG, "onArmUnsync: " + myo.toString());
+            }
 
-                @Override
-                public void onUnlock(Myo myo, long l) {
-                    Log.wtf("AWAREMYO", "Unlock: " + myo.toString());
-                }
+            @Override
+            public void onUnlock(Myo myo, long l) {
+                //Log.wtf(Plugin.MYO_TAG, "Unlock: " + myo.toString());
+            }
 
-                @Override
-                public void onLock(Myo myo, long l) {
-                    Log.wtf("AWAREMYO", "onLock: " + myo.toString());
-                }
+            @Override
+            public void onLock(Myo myo, long l) {
+                //Log.wtf(Plugin.MYO_TAG, "onLock: " + myo.toString());
+            }
 
-                @Override
-                public void onPose(Myo myo, long l, Pose pose) {
-                    Log.wtf("AWAREMYO", "onPose: " + myo.toString());
-                }
+            @Override
+            public void onPose(Myo myo, long l, Pose pose) {
+                //Log.wtf(Plugin.MYO_TAG, "onPose: " + myo.toString());
+            }
 
-                @Override
-                public void onOrientationData(Myo myo, long l, Quaternion quaternion) {
-                    //Log.wtf("AWAREMYO", "onOrientationData: " + myo.toString());
-                }
+            @Override
+            public void onOrientationData(Myo myo, long l, Quaternion quaternion) {
+                //Log.wtf(Plugin.MYO_TAG, "onOrientationData: " + myo.toString());
+            }
 
-                @Override
-                public void onAccelerometerData(Myo myo, long l, Vector3 vector3) {
-                    //Log.wtf("AWAREMYO", "onAccelerometerData: " + myo.toString());
-                }
+            @Override
+            public void onAccelerometerData(Myo myo, long l, Vector3 vector3) {
+                //Log.wtf(Plugin.MYO_TAG, "onAccelerometerData: " + myo.toString());
+            }
 
-                @Override
-                public void onGyroscopeData(Myo myo, long l, Vector3 vector3) {
-                    //Log.wtf("AWAREMYO", "onGyroscopeData: " + myo.toString());
-                }
+            @Override
+            public void onGyroscopeData(Myo myo, long l, Vector3 vector3) {
+                //Log.wtf(Plugin.MYO_TAG, "onGyroscopeData: " + myo.toString());
+                ContentValues gyroscope = new ContentValues();
+                gyroscope.put("x", vector3.x());
+                gyroscope.put("y", vector3.y());
+                gyroscope.put("z", vector3.z());
 
-                @Override
-                public void onRssi(Myo myo, long l, int i) {
-                    Log.wtf("AWAREMYO", "onRssi: " + myo.toString());
-                }
-            });
-        }
+                if (awareSensor != null) awareSensor.onMyoGyroscopeChanged(gyroscope);
+            }
+
+            @Override
+            public void onRssi(Myo myo, long l, int i) {
+                //Log.wtf(Plugin.MYO_TAG, "onRssi: " + myo.toString());
+            }
+        });
 
         BroadcastReceiver myoConnectReceiver = new BroadcastReceiver() {
             @Override
@@ -207,11 +239,12 @@ public class Plugin extends Aware_Plugin {
                 String macaddress = intent.getStringExtra("connMac");
 
                 if (toggleStatus.equals("on")) {
-                    Log.wtf("AWAREMYO", "Connecting to adjacent Myo...");
+                    Log.wtf(Plugin.MYO_TAG, "Connecting to adjacent Myo...");
                     myoHub.attachToAdjacentMyo();
+
                 }
                 if (toggleStatus.equals("off")) {
-                    Log.wtf("AWAREMYO", "Disonnecting from Myo...");
+                    Log.wtf(Plugin.MYO_TAG, "Disonnecting from Myo...");
                     myoHub.detach(macaddress);
                 }
             }
@@ -219,5 +252,6 @@ public class Plugin extends Aware_Plugin {
 
         IntentFilter myoConnectFilter = new IntentFilter("MYO_CONNECT");
         registerReceiver(myoConnectReceiver, myoConnectFilter);
+
     }
 }

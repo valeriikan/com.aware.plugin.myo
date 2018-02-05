@@ -13,6 +13,39 @@
         android:layout_marginStart="8dp"
         android:text="Connect to Myo first"
         android:textColor="#000"/>
+    
+    <TextView
+        android:id="@+id/gyroX"
+        android:layout_width="100dp"
+        android:layout_height="30dp"
+        android:layout_below="@+id/myoStatus"
+        android:layout_marginStart="8dp"
+        android:textAppearance="?android:attr/textAppearanceLarge"
+        android:text="X: 111"
+        android:textColor="#000"
+        android:visibility="invisible"/>
+
+    <TextView
+        android:id="@+id/gyroY"
+        android:layout_width="100dp"
+        android:layout_height="30dp"
+        android:layout_below="@+id/gyroX"
+        android:layout_marginStart="8dp"
+        android:textAppearance="?android:attr/textAppearanceLarge"
+        android:text="Y: 222"
+        android:textColor="#000"
+        android:visibility="invisible"/>
+
+    <TextView
+        android:id="@+id/gyroZ"
+        android:layout_width="100dp"
+        android:layout_height="30dp"
+        android:layout_below="@+id/gyroY"
+        android:layout_marginStart="8dp"
+        android:textAppearance="?android:attr/textAppearanceLarge"
+        android:text="Z: 333"
+        android:textColor="#000"
+        android:visibility="invisible"/>
 
     <ToggleButton
         android:id="@+id/connectBtn"
