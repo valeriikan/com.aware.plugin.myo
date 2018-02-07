@@ -1,6 +1,8 @@
 package com.aware.plugin.myo;
 
 import android.Manifest;
+import android.app.Notification;
+import android.app.NotificationManager;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.ContentValues;
@@ -8,6 +10,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Bundle;
+import android.support.v4.app.NotificationCompat;
 import android.util.Log;
 
 import com.aware.Aware;
@@ -27,8 +30,10 @@ public class Plugin extends Aware_Plugin {
     public static final String ACTION_PLUGIN_MYO_CONNECTED = "ACTION_PLUGIN_MYO_CONNECTED";
     public static final String ACTION_PLUGIN_MYO_DISCONNECTED = "ACTION_PLUGIN_MYO_DISCONNECTED";
     public static final String ACTION_PLUGIN_MYO_GYROSCOPE = "ACTION_PLUGIN_MYO_GYROSCOPE";
+    public static final String ACTION_PLUGIN_MYO_POSE = "ACTION_PLUGIN_MYO_POSE";
     public static final String MAC_ADDRESS = "MAC_ADDRESS";
     public static final String MYO_GYROVALUES = "MYO_GYROVALUES";
+    public static final String MYO_POSE = "MYO_POSE";
     public static final String MYO_TAG = "MYO_TAG";
 
     @Override
@@ -75,10 +80,12 @@ public class Plugin extends Aware_Plugin {
         void onMyoConnected(String macaddress);
         void onMyoDisconnected();
         void onMyoGyroscopeChanged(ContentValues data);
+        void onMyoPoseChanged(String pose);
     }
 
     // Myo component
     private Hub myoHub;
+    private String myo_macaddress = null;
 
     //This function gets called every 5 minutes by AWARE to make sure this plugin is still running.
     @Override
@@ -97,6 +104,7 @@ public class Plugin extends Aware_Plugin {
 
             if (myoHub == null) {
                 setupMyo();
+                startForeground(1, showNotification("Myo is not connected"));
             }
 
             setSensorObserver(new AWARESensorObserver() {
@@ -119,6 +127,13 @@ public class Plugin extends Aware_Plugin {
                     myoGyroscope.putExtra(Plugin.MYO_GYROVALUES, data);
                     sendBroadcast(myoGyroscope);
                 }
+
+                @Override
+                public void onMyoPoseChanged(String pose) {
+                    Intent myoPose = new Intent(Plugin.ACTION_PLUGIN_MYO_POSE);
+                    myoPose.putExtra(Plugin.MYO_POSE, pose);
+                    sendBroadcast(myoPose);
+                }
             });
         }
 
@@ -139,7 +154,10 @@ public class Plugin extends Aware_Plugin {
         }
 
         //Removing values
-
+        if (myoHub!=null && myo_macaddress!=null) {
+            myoHub.detach(myo_macaddress);
+            stopForeground(true);
+        }
 
         Aware.setSetting(this, Settings.STATUS_PLUGIN_TEMPLATE, false);
 
@@ -169,6 +187,7 @@ public class Plugin extends Aware_Plugin {
             @Override
             public void onConnect(Myo myo, long l) {
                 Log.d(Plugin.MYO_TAG, "Connected to Myo:" + myo.toString());
+                startForeground(1, showNotification("Myo is connected"));
 
                 if (awareSensor != null) awareSensor.onMyoConnected(myo.getMacAddress());
             }
@@ -176,6 +195,7 @@ public class Plugin extends Aware_Plugin {
             @Override
             public void onDisconnect(Myo myo, long l) {
                 Log.wtf(Plugin.MYO_TAG, "Disconnected from Myo:" + myo.toString());
+                startForeground(1, showNotification("Myo is disconnected"));
 
                 if (awareSensor != null) awareSensor.onMyoDisconnected();
             }
@@ -202,7 +222,8 @@ public class Plugin extends Aware_Plugin {
 
             @Override
             public void onPose(Myo myo, long l, Pose pose) {
-                //Log.wtf(Plugin.MYO_TAG, "onPose: " + myo.toString());
+                Log.wtf(Plugin.MYO_TAG, "onPose: " + pose.name());
+                if (awareSensor != null) awareSensor.onMyoPoseChanged(pose.name());
             }
 
             @Override
@@ -236,7 +257,7 @@ public class Plugin extends Aware_Plugin {
             @Override
             public void onReceive(Context context, Intent intent) {
                 String toggleStatus = intent.getStringExtra("toggleStatus");
-                String macaddress = intent.getStringExtra("connMac");
+                myo_macaddress = intent.getStringExtra("connMac");
 
                 if (toggleStatus.equals("on")) {
                     Log.wtf(Plugin.MYO_TAG, "Connecting to adjacent Myo...");
@@ -245,7 +266,7 @@ public class Plugin extends Aware_Plugin {
                 }
                 if (toggleStatus.equals("off")) {
                     Log.wtf(Plugin.MYO_TAG, "Disonnecting from Myo...");
-                    myoHub.detach(macaddress);
+                    myoHub.detach(myo_macaddress);
                 }
             }
         };
@@ -253,5 +274,30 @@ public class Plugin extends Aware_Plugin {
         IntentFilter myoConnectFilter = new IntentFilter("MYO_CONNECT");
         registerReceiver(myoConnectReceiver, myoConnectFilter);
 
+    }
+
+    private void showNotification1() {
+        NotificationCompat.Builder mBuilder =
+                new NotificationCompat.Builder(this)
+                        .setSmallIcon(R.drawable.ic_launcher)
+                        .setOngoing(true)
+                        .setContentTitle("My notification")
+                        .setContentText("Hello World!");
+
+        int mNotificationId = 001;
+        NotificationManager mNotifyMgr =
+                (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        // Builds the notification and issues it.
+        mNotifyMgr.notify(mNotificationId, mBuilder.build());
+    }
+
+    private Notification showNotification(String notifyText) {
+
+        return new Notification.Builder(getApplicationContext())
+                .setSmallIcon(R.drawable.ic_launcher)
+                .setOngoing(true)
+                .setContentTitle("AWARE: Myo armband")
+                .setContentText(notifyText)
+                .getNotification();
     }
 }

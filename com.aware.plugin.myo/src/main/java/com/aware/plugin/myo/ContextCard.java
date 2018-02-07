@@ -24,6 +24,7 @@ public class ContextCard implements IContextCard {
     private TextView gyroX = null;
     private TextView gyroY = null;
     private TextView gyroZ = null;
+    private TextView myoPose = null;
     private ToggleButton connectBtn = null;
     private ProgressBar progress = null;
     private String macaddress = null;
@@ -36,6 +37,7 @@ public class ContextCard implements IContextCard {
         gyroX = card.findViewById(R.id.gyroX);
         gyroY = card.findViewById(R.id.gyroY);
         gyroZ = card.findViewById(R.id.gyroZ);
+        myoPose = card.findViewById(R.id.myoPose);
         connectBtn = card.findViewById(R.id.connectBtn);
         progress = card.findViewById(R.id.progress);
 
@@ -76,6 +78,7 @@ public class ContextCard implements IContextCard {
         myofilter.addAction(Plugin.ACTION_PLUGIN_MYO_CONNECTED);
         myofilter.addAction(Plugin.ACTION_PLUGIN_MYO_DISCONNECTED);
         myofilter.addAction(Plugin.ACTION_PLUGIN_MYO_GYROSCOPE);
+        myofilter.addAction(Plugin.ACTION_PLUGIN_MYO_POSE);
         context.registerReceiver(myoListener, myofilter);
 
         //Return the card to AWARE/apps
@@ -94,6 +97,7 @@ public class ContextCard implements IContextCard {
                 gyroX.setVisibility(View.VISIBLE);
                 gyroY.setVisibility(View.VISIBLE);
                 gyroZ.setVisibility(View.VISIBLE);
+                myoPose.setVisibility(View.VISIBLE);
                 progress.setVisibility(View.INVISIBLE);
                 myoStatus.setText("Connected to " + macaddress);
             }
@@ -104,6 +108,7 @@ public class ContextCard implements IContextCard {
                 gyroX.setVisibility(View.INVISIBLE);
                 gyroY.setVisibility(View.INVISIBLE);
                 gyroZ.setVisibility(View.INVISIBLE);
+                myoPose.setVisibility(View.INVISIBLE);
                 progress.setVisibility(View.INVISIBLE);
                 myoStatus.setText("Disconnected");
             }
@@ -115,6 +120,10 @@ public class ContextCard implements IContextCard {
                 gyroX.setText(x);
                 gyroY.setText(y);
                 gyroZ.setText(z);
+            }
+            if (intent.getAction().equalsIgnoreCase(Plugin.ACTION_PLUGIN_MYO_POSE)){
+                String pose = "Pose: " + intent.getStringExtra(Plugin.MYO_POSE);
+                myoPose.setText(pose);
             }
         }
     }
