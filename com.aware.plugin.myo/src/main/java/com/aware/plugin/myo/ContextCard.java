@@ -20,6 +20,12 @@ public class ContextCard implements IContextCard {
     public ContextCard() {
     }
 
+    static final String CONTEXT_ACTION_MYO_CONNECT = "CONTEXT_ACTION_MYO_CONNECT";
+    static final String CONTEXT_TOGGLE_STATUS = "CONTEXT_TOGGLE_STATUS";
+    static final String CONTEXT_TOGGLE_ON = "CONTEXT_TOGGLE_ON";
+    static final String CONTEXT_TOGGLE_OFF = "CONTEXT_TOGGLE_OFF";
+    static final String CONTEXT_MAC_ADRESS = "CONTEXT_MAC_ADRESS";
+
     private TextView myoStatus = null;
     private TextView gyroX = null;
     private TextView gyroY = null;
@@ -47,27 +53,27 @@ public class ContextCard implements IContextCard {
 
                 if (connectBtn.isChecked()) {
 
-                    Log.wtf(Plugin.MYO_TAG, "ON CLICKED");
+                    Log.d(Plugin.MYO_TAG, "ON CLICKED");
                     connectBtn.setEnabled(false);
                     connectBtn.setVisibility(View.INVISIBLE);
                     progress.setVisibility(View.VISIBLE);
                     myoStatus.setText("Connecting...");
 
-                    Intent intent = new Intent("MYO_CONNECT");
-                    intent.putExtra("toggleStatus", "on");
+                    Intent intent = new Intent(ContextCard.CONTEXT_ACTION_MYO_CONNECT);
+                    intent.putExtra(ContextCard.CONTEXT_TOGGLE_STATUS, ContextCard.CONTEXT_TOGGLE_ON);
                     context.sendBroadcast(intent);
                     
                 } else {
 
-                    Log.wtf(Plugin.MYO_TAG, "OFF CLICKED");
+                    Log.d(Plugin.MYO_TAG, "OFF CLICKED");
                     connectBtn.setEnabled(false);
                     connectBtn.setVisibility(View.INVISIBLE);
                     progress.setVisibility(View.VISIBLE);
                     myoStatus.setText("Disconnecting...");
                     
-                    Intent intent = new Intent("MYO_CONNECT");
-                    intent.putExtra("toggleStatus", "off");
-                    intent.putExtra("connMac", macaddress);
+                    Intent intent = new Intent(ContextCard.CONTEXT_ACTION_MYO_CONNECT);
+                    intent.putExtra(ContextCard.CONTEXT_TOGGLE_STATUS, ContextCard.CONTEXT_TOGGLE_OFF);
+                    intent.putExtra(ContextCard.CONTEXT_MAC_ADRESS, macaddress);
                     context.sendBroadcast(intent);
 
                 }
@@ -90,7 +96,7 @@ public class ContextCard implements IContextCard {
         @Override
         public void onReceive(Context context, Intent intent) {
             if (intent.getAction().equalsIgnoreCase(Plugin.ACTION_PLUGIN_MYO_CONNECTED)){
-                macaddress = intent.getStringExtra(Plugin.MAC_ADDRESS);
+                macaddress = intent.getStringExtra(Plugin.MYO_MAC_ADDRESS);
                 connectBtn.setChecked(true);
                 connectBtn.setEnabled(true);
                 connectBtn.setVisibility(View.VISIBLE);

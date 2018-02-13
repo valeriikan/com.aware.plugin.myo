@@ -2,7 +2,6 @@ package com.aware.plugin.myo;
 
 import android.Manifest;
 import android.app.Notification;
-import android.app.NotificationManager;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.ContentValues;
@@ -10,7 +9,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Bundle;
-import android.support.v4.app.NotificationCompat;
 import android.util.Log;
 
 import com.aware.Aware;
@@ -31,7 +29,7 @@ public class Plugin extends Aware_Plugin {
     public static final String ACTION_PLUGIN_MYO_DISCONNECTED = "ACTION_PLUGIN_MYO_DISCONNECTED";
     public static final String ACTION_PLUGIN_MYO_GYROSCOPE = "ACTION_PLUGIN_MYO_GYROSCOPE";
     public static final String ACTION_PLUGIN_MYO_POSE = "ACTION_PLUGIN_MYO_POSE";
-    public static final String MAC_ADDRESS = "MAC_ADDRESS";
+    public static final String MYO_MAC_ADDRESS = "MYO_MAC_ADDRESS";
     public static final String MYO_GYROVALUES = "MYO_GYROVALUES";
     public static final String MYO_POSE = "MYO_POSE";
     public static final String MYO_TAG = "MYO_TAG";
@@ -111,7 +109,7 @@ public class Plugin extends Aware_Plugin {
                 @Override
                 public void onMyoConnected(String macaddress) {
                     Intent myoConnected = new Intent(Plugin.ACTION_PLUGIN_MYO_CONNECTED);
-                    myoConnected.putExtra(Plugin.MAC_ADDRESS, macaddress);
+                    myoConnected.putExtra(Plugin.MYO_MAC_ADDRESS, macaddress);
                     sendBroadcast(myoConnected);
                 }
 
@@ -168,20 +166,21 @@ public class Plugin extends Aware_Plugin {
     // Initializing Hub and attaching listener to it
     public void setupMyo() {
 
-        Log.wtf(Plugin.MYO_TAG, "setupMyo started");
+        Log.d(Plugin.MYO_TAG, "setupMyo started");
 
         myoHub = Hub.getInstance();
         myoHub.init(getApplicationContext());
+        myoHub.setLockingPolicy(Hub.LockingPolicy.NONE);
 
         myoHub.addListener(new DeviceListener() {
             @Override
             public void onAttach(Myo myo, long l) {
-                Log.wtf(Plugin.MYO_TAG, "Attached to Myo:" + myo.toString());
+                Log.d(Plugin.MYO_TAG, "Attached to Myo:" + myo.toString());
             }
 
             @Override
             public void onDetach(Myo myo, long l) {
-                Log.wtf(Plugin.MYO_TAG, "Detached Myo:" + myo.toString());
+                Log.d(Plugin.MYO_TAG, "Detached Myo:" + myo.toString());
             }
 
             @Override
@@ -194,7 +193,7 @@ public class Plugin extends Aware_Plugin {
 
             @Override
             public void onDisconnect(Myo myo, long l) {
-                Log.wtf(Plugin.MYO_TAG, "Disconnected from Myo:" + myo.toString());
+                Log.d(Plugin.MYO_TAG, "Disconnected from Myo:" + myo.toString());
                 startForeground(1, showNotification("Myo is disconnected"));
 
                 if (awareSensor != null) awareSensor.onMyoDisconnected();
@@ -202,43 +201,43 @@ public class Plugin extends Aware_Plugin {
 
             @Override
             public void onArmSync(Myo myo, long l, Arm arm, XDirection xDirection) {
-               // Log.wtf(Plugin.MYO_TAG, "onArmSync: " + myo.toString());
+               // Log.d(Plugin.MYO_TAG, "onArmSync: " + myo.toString());
             }
 
             @Override
             public void onArmUnsync(Myo myo, long l) {
-                //Log.wtf(Plugin.MYO_TAG, "onArmUnsync: " + myo.toString());
+                //Log.d(Plugin.MYO_TAG, "onArmUnsync: " + myo.toString());
             }
 
             @Override
             public void onUnlock(Myo myo, long l) {
-                //Log.wtf(Plugin.MYO_TAG, "Unlock: " + myo.toString());
+                //Log.d(Plugin.MYO_TAG, "Unlock: " + myo.toString());
             }
 
             @Override
             public void onLock(Myo myo, long l) {
-                //Log.wtf(Plugin.MYO_TAG, "onLock: " + myo.toString());
+                //Log.d(Plugin.MYO_TAG, "onLock: " + myo.toString());
             }
 
             @Override
             public void onPose(Myo myo, long l, Pose pose) {
-                Log.wtf(Plugin.MYO_TAG, "onPose: " + pose.name());
+                Log.d(Plugin.MYO_TAG, "onPose: " + pose.name());
                 if (awareSensor != null) awareSensor.onMyoPoseChanged(pose.name());
             }
 
             @Override
             public void onOrientationData(Myo myo, long l, Quaternion quaternion) {
-                //Log.wtf(Plugin.MYO_TAG, "onOrientationData: " + myo.toString());
+                //Log.d(Plugin.MYO_TAG, "onOrientationData: " + myo.toString());
             }
 
             @Override
             public void onAccelerometerData(Myo myo, long l, Vector3 vector3) {
-                //Log.wtf(Plugin.MYO_TAG, "onAccelerometerData: " + myo.toString());
+                //Log.d(Plugin.MYO_TAG, "onAccelerometerData: " + myo.toString());
             }
 
             @Override
             public void onGyroscopeData(Myo myo, long l, Vector3 vector3) {
-                //Log.wtf(Plugin.MYO_TAG, "onGyroscopeData: " + myo.toString());
+                //Log.d(Plugin.MYO_TAG, "onGyroscopeData: " + myo.toString());
                 ContentValues gyroscope = new ContentValues();
                 gyroscope.put("x", vector3.x());
                 gyroscope.put("y", vector3.y());
@@ -249,52 +248,37 @@ public class Plugin extends Aware_Plugin {
 
             @Override
             public void onRssi(Myo myo, long l, int i) {
-                //Log.wtf(Plugin.MYO_TAG, "onRssi: " + myo.toString());
+                //Log.d(Plugin.MYO_TAG, "onRssi: " + myo.toString());
             }
         });
 
         BroadcastReceiver myoConnectReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
-                String toggleStatus = intent.getStringExtra("toggleStatus");
-                myo_macaddress = intent.getStringExtra("connMac");
+                String toggleStatus = intent.getStringExtra(ContextCard.CONTEXT_TOGGLE_STATUS);
+                myo_macaddress = intent.getStringExtra(ContextCard.CONTEXT_MAC_ADRESS);
 
-                if (toggleStatus.equals("on")) {
-                    Log.wtf(Plugin.MYO_TAG, "Connecting to adjacent Myo...");
+                if (toggleStatus.equals(ContextCard.CONTEXT_TOGGLE_ON)) {
+                    Log.d(Plugin.MYO_TAG, "Connecting to adjacent Myo...");
                     myoHub.attachToAdjacentMyo();
 
                 }
-                if (toggleStatus.equals("off")) {
-                    Log.wtf(Plugin.MYO_TAG, "Disonnecting from Myo...");
+                if (toggleStatus.equals(ContextCard.CONTEXT_TOGGLE_OFF)) {
+                    Log.d(Plugin.MYO_TAG, "Disonnecting from Myo...");
                     myoHub.detach(myo_macaddress);
                 }
             }
         };
 
-        IntentFilter myoConnectFilter = new IntentFilter("MYO_CONNECT");
+        IntentFilter myoConnectFilter = new IntentFilter(ContextCard.CONTEXT_ACTION_MYO_CONNECT);
         registerReceiver(myoConnectReceiver, myoConnectFilter);
 
-    }
-
-    private void showNotification1() {
-        NotificationCompat.Builder mBuilder =
-                new NotificationCompat.Builder(this)
-                        .setSmallIcon(R.drawable.ic_launcher)
-                        .setOngoing(true)
-                        .setContentTitle("My notification")
-                        .setContentText("Hello World!");
-
-        int mNotificationId = 001;
-        NotificationManager mNotifyMgr =
-                (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-        // Builds the notification and issues it.
-        mNotifyMgr.notify(mNotificationId, mBuilder.build());
     }
 
     private Notification showNotification(String notifyText) {
 
         return new Notification.Builder(getApplicationContext())
-                .setSmallIcon(R.drawable.ic_launcher)
+                .setSmallIcon(R.drawable.ic_myo)
                 .setOngoing(true)
                 .setContentTitle("AWARE: Myo armband")
                 .setContentText(notifyText)

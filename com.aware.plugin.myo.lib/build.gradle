@@ -78,12 +78,11 @@ configurations.all {
 
 dependencies {
     api "com.github.denzilferreira:aware-client:$aware_libs"
+    api('com.thalmic:myosdk:0.10.+@aar')
 
     repositories {
         maven {
-            url 'C:/Android/AndroidStudioProjects/myo-android-sdk-0.10.0/myorepository'
+            url 'C:/Android/Projects/myo-android-sdk-0.10.0/myorepository'
         }
     }
-
-    compile('com.thalmic:myosdk:0.10.+@aar')
 }
