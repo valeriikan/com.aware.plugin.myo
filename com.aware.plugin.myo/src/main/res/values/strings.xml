@@ -1,4 +1,4 @@
 <resources>
-    <string name="app_name">AWARE: Plugin Template</string>
-    <string name="plugin_template">Plugin: Template</string>
+    <string name="app_name">AWARE: Myo Plugin</string>
+    <string name="plugin_template">Plugin: Myo</string>
 </resources>

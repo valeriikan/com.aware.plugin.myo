@@ -26,16 +26,12 @@ public class ContextCard implements IContextCard {
     static final String CONTEXT_TOGGLE_STATUS = "CONTEXT_TOGGLE_STATUS";
     static final String CONTEXT_TOGGLE_ON = "CONTEXT_TOGGLE_ON";
     static final String CONTEXT_TOGGLE_OFF = "CONTEXT_TOGGLE_OFF";
-    static final String CONTEXT_MAC_ADRESS = "CONTEXT_MAC_ADRESS";
 
-    private TextView tvMyoStatus, tvMyoMac, tvMyoBattery, tvGyroX, tvGyroY, tvGyroZ, tvMyoPose,
+    private TextView tvMyoStatus, tvMyoMac, tvMyoBattery, tvGyroX, tvGyroY, tvGyroZ,
                         tvEmg0, tvEmg1, tvEmg2, tvEmg3, tvEmg4, tvEmg5, tvEmg6, tvEmg7;
     private ToggleButton connectBtn = null;
     private ProgressBar progress = null;
     private RelativeLayout myoData;
-    private String macaddress = null;
-    private String batteryLvl = null;
-
 
 
     @Override
@@ -49,7 +45,6 @@ public class ContextCard implements IContextCard {
         tvGyroX = card.findViewById(R.id.gyroX);
         tvGyroY = card.findViewById(R.id.gyroY);
         tvGyroZ = card.findViewById(R.id.gyroZ);
-        //tvMyoPose = card.findViewById(R.id.myoPose);
         tvEmg0 = card.findViewById(R.id.emg0);
         tvEmg1 = card.findViewById(R.id.emg1);
         tvEmg2 = card.findViewById(R.id.emg2);
@@ -58,8 +53,6 @@ public class ContextCard implements IContextCard {
         tvEmg5 = card.findViewById(R.id.emg5);
         tvEmg6 = card.findViewById(R.id.emg6);
         tvEmg7 = card.findViewById(R.id.emg7);
-
-
         connectBtn = card.findViewById(R.id.connectBtn);
         progress = card.findViewById(R.id.progress);
 
@@ -68,35 +61,28 @@ public class ContextCard implements IContextCard {
             public void onClick(View view) {
 
                 if (connectBtn.isChecked()) {
-
-                    Log.d(Plugin.MYO_TAG, "ON CLICKED");
-                    connectBtn.setEnabled(false);
-                    connectBtn.setVisibility(View.INVISIBLE);
-                    progress.setVisibility(View.VISIBLE);
-                    tvMyoStatus.setText("Connecting...");
-
+                    //Send "toggle_on" broadcast to Plugin
                     Intent intent = new Intent(ContextCard.CONTEXT_ACTION_MYO_CONNECT);
                     intent.putExtra(ContextCard.CONTEXT_TOGGLE_STATUS, ContextCard.CONTEXT_TOGGLE_ON);
                     context.sendBroadcast(intent);
-                    
-                } else {
 
+                } else {
+                    //Send "toggle_off" broadcast to Plugin
+                    Intent intent = new Intent(ContextCard.CONTEXT_ACTION_MYO_CONNECT);
+                    intent.putExtra(ContextCard.CONTEXT_TOGGLE_STATUS, ContextCard.CONTEXT_TOGGLE_OFF);
+                    context.sendBroadcast(intent);
+
+                    //Update views to "off" state
                     Log.d(Plugin.MYO_TAG, "OFF CLICKED");
                     connectBtn.setEnabled(false);
                     connectBtn.setVisibility(View.INVISIBLE);
                     progress.setVisibility(View.VISIBLE);
                     tvMyoStatus.setText("Disconnecting...");
-
-                    Intent intent = new Intent(ContextCard.CONTEXT_ACTION_MYO_CONNECT);
-                    intent.putExtra(ContextCard.CONTEXT_TOGGLE_STATUS, ContextCard.CONTEXT_TOGGLE_OFF);
-                    //intent.putExtra(ContextCard.CONTEXT_MAC_ADRESS, macaddress);
-                    context.sendBroadcast(intent);
-
                 }
             }
         });
 
-
+        //Registering Plugin actions
         IntentFilter myofilter = new IntentFilter();
         myofilter.addAction(Plugin.ACTION_PLUGIN_MYO_CONNECTED);
         myofilter.addAction(Plugin.ACTION_PLUGIN_MYO_CONNECTION_FAILED);
@@ -104,29 +90,26 @@ public class ContextCard implements IContextCard {
         myofilter.addAction(Plugin.ACTION_PLUGIN_MYO_BATTERY_LEVEL);
         myofilter.addAction(Plugin.ACTION_PLUGIN_MYO_GYROSCOPE);
         myofilter.addAction(Plugin.ACTION_PLUGIN_MYO_EMG);
-        //myofilter.addAction(Plugin.ACTION_PLUGIN_MYO_POSE);
+        myofilter.addAction(Plugin.ACTION_PLUGIN_BLUETOOTH_CONNECTION);
         context.registerReceiver(myoListener, myofilter);
-
 
         //Return the card to AWARE/apps
         return card;
     }
 
+    //Registering Plugin actions
     private MyoListener myoListener = new MyoListener();
     public class MyoListener extends BroadcastReceiver {
         @Override
         public void onReceive(Context context, Intent intent) {
             if (intent.getAction().equalsIgnoreCase(Plugin.ACTION_PLUGIN_MYO_CONNECTED)){
-                macaddress = intent.getStringExtra(Plugin.MYO_MAC_ADDRESS);
-                //batteryLvl = intent.getStringExtra(Plugin.MYO_BATTERY_LEVEL);
                 connectBtn.setChecked(true);
                 connectBtn.setEnabled(true);
                 connectBtn.setVisibility(View.VISIBLE);
                 myoData.setVisibility(View.VISIBLE);
                 progress.setVisibility(View.INVISIBLE);
                 tvMyoStatus.setText("Connected to Myo");
-                tvMyoMac.setText(macaddress);
-                tvMyoBattery.setText(batteryLvl);
+                tvMyoMac.setText(intent.getStringExtra(Plugin.MYO_MAC_ADDRESS));
             }
             if (intent.getAction().equalsIgnoreCase(Plugin.ACTION_PLUGIN_MYO_CONNECTION_FAILED)){
                 Toast.makeText(context, "Connection failed, please check your Myo", Toast.LENGTH_SHORT).show();
@@ -151,37 +134,34 @@ public class ContextCard implements IContextCard {
             }
             if (intent.getAction().equalsIgnoreCase(Plugin.ACTION_PLUGIN_MYO_GYROSCOPE)){
                 ContentValues gyroData = intent.getParcelableExtra(Plugin.MYO_GYROVALUES);
-                String x = gyroData.getAsString("gyroX");
-                String y = gyroData.getAsString("gyroY");
-                String z = gyroData.getAsString("gyroZ");
-                tvGyroX.setText(x);
-                tvGyroY.setText(y);
-                tvGyroZ.setText(z);
+                tvGyroX.setText(gyroData.getAsString("gyroX"));
+                tvGyroY.setText(gyroData.getAsString("gyroY"));
+                tvGyroZ.setText(gyroData.getAsString("gyroZ"));
             }
             if (intent.getAction().equalsIgnoreCase(Plugin.ACTION_PLUGIN_MYO_EMG)){
                 ContentValues gyroData = intent.getParcelableExtra(Plugin.MYO_EMG);
-                String emg0 = gyroData.getAsString("emg0");
-                String emg1 = gyroData.getAsString("emg1");
-                String emg2 = gyroData.getAsString("emg2");
-                String emg3 = gyroData.getAsString("emg3");
-                String emg4 = gyroData.getAsString("emg4");
-                String emg5 = gyroData.getAsString("emg5");
-                String emg6 = gyroData.getAsString("emg6");
-                String emg7 = gyroData.getAsString("emg7");
-
-                tvEmg0.setText(emg0);
-                tvEmg1.setText(emg1);
-                tvEmg2.setText(emg2);
-                tvEmg3.setText(emg3);
-                tvEmg4.setText(emg4);
-                tvEmg5.setText(emg5);
-                tvEmg6.setText(emg6);
-                tvEmg7.setText(emg7);
+                tvEmg0.setText(gyroData.getAsString("emg0"));
+                tvEmg1.setText(gyroData.getAsString("emg1"));
+                tvEmg2.setText(gyroData.getAsString("emg2"));
+                tvEmg3.setText(gyroData.getAsString("emg3"));
+                tvEmg4.setText(gyroData.getAsString("emg4"));
+                tvEmg5.setText(gyroData.getAsString("emg5"));
+                tvEmg6.setText(gyroData.getAsString("emg6"));
+                tvEmg7.setText(gyroData.getAsString("emg7"));
 
             }
-            if (intent.getAction().equalsIgnoreCase(Plugin.ACTION_PLUGIN_MYO_POSE)){
-                String pose = "Pose: " + intent.getStringExtra(Plugin.MYO_POSE);
-                //myoPose.setText(pose);
+            if (intent.getAction().equalsIgnoreCase(Plugin.ACTION_PLUGIN_BLUETOOTH_CONNECTION)){
+                Boolean bluetoothEnabled = intent.getBooleanExtra(Plugin.DEVICE_BLUETOOTH, false);
+                if (bluetoothEnabled) {
+                    Log.d(Plugin.MYO_TAG, "ON CLICKED");
+                    connectBtn.setEnabled(false);
+                    connectBtn.setVisibility(View.INVISIBLE);
+                    progress.setVisibility(View.VISIBLE);
+                    tvMyoStatus.setText("Connecting...");
+                } else {
+                    connectBtn.setChecked(false);
+                    Toast.makeText(context, "Turn on bluetooth on your device first", Toast.LENGTH_SHORT).show();
+                }
             }
         }
     }
