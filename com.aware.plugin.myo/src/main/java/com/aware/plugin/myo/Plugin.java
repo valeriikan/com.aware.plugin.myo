@@ -39,6 +39,7 @@ public class Plugin extends Aware_Plugin implements
     public static final String ACTION_PLUGIN_MYO_CONNECTED = "ACTION_PLUGIN_MYO_CONNECTED";
     public static final String ACTION_PLUGIN_MYO_CONNECTION_FAILED = "ACTION_PLUGIN_MYO_CONNECTION_FAILED";
     public static final String ACTION_PLUGIN_MYO_DISCONNECTED = "ACTION_PLUGIN_MYO_DISCONNECTED";
+    public static final String ACTION_PLUGIN_MYO_BATTERY_LEVEL = "ACTION_PLUGIN_MYO_BATTERY_LEVEL";
     public static final String ACTION_PLUGIN_MYO_GYROSCOPE = "ACTION_PLUGIN_MYO_GYROSCOPE";
     public static final String ACTION_PLUGIN_MYO_EMG = "ACTION_PLUGIN_MYO_EMG";
     public static final String ACTION_PLUGIN_MYO_POSE = "ACTION_PLUGIN_MYO_POSE";
@@ -92,9 +93,10 @@ public class Plugin extends Aware_Plugin implements
 
 
     public interface AWARESensorObserver {
-        void onMyoConnected(String macaddress, String battery);
+        void onMyoConnected(String macaddress);
         void onMyoConnectionFailed();
         void onMyoDisconnected();
+        void onMyoBatteryChanged(String battery);
         void onMyoGyroChanged(ContentValues data);
         void onMyoEmgChanged(ContentValues data);
         void onMyoPoseChanged(String pose);
@@ -106,6 +108,7 @@ public class Plugin extends Aware_Plugin implements
     private EmgProcessor emgProcessor = null;
     private ImuProcessor imuProcessor = null;
     private List<Myo> myos = null;
+    private int batteryLvl = -100;
 
     //This function gets called every 5 minutes by AWARE to make sure this plugin is still running.
     @Override
@@ -118,9 +121,6 @@ public class Plugin extends Aware_Plugin implements
 
             //Initialize our plugin's settings
             Aware.setSetting(this, Settings.STATUS_PLUGIN_TEMPLATE, true);
-
-            //Initialise AWARE instance in plugin
-            Aware.startAWARE(this);
 
             if (connector == null) connector = new MyoConnector(this);
 
@@ -153,10 +153,9 @@ public class Plugin extends Aware_Plugin implements
             //Sensor observer set up
             setSensorObserver(new AWARESensorObserver() {
                 @Override
-                public void onMyoConnected(String macaddress, String battery) {
+                public void onMyoConnected(String macaddress) {
                     Intent myoConnected = new Intent(Plugin.ACTION_PLUGIN_MYO_CONNECTED);
                     myoConnected.putExtra(Plugin.MYO_MAC_ADDRESS, macaddress);
-                    myoConnected.putExtra(Plugin.MYO_BATTERY_LEVEL, battery);
                     sendBroadcast(myoConnected);
                 }
 
@@ -170,6 +169,13 @@ public class Plugin extends Aware_Plugin implements
                 public void onMyoDisconnected() {
                     Intent myoDisconnected = new Intent(Plugin.ACTION_PLUGIN_MYO_DISCONNECTED);
                     sendBroadcast(myoDisconnected);
+                }
+
+                @Override
+                public void onMyoBatteryChanged(String battery) {
+                    Intent myoBattery = new Intent(Plugin.ACTION_PLUGIN_MYO_BATTERY_LEVEL);
+                    myoBattery.putExtra(Plugin.MYO_BATTERY_LEVEL, battery);
+                    sendBroadcast(myoBattery);
                 }
 
                 @Override
@@ -193,6 +199,9 @@ public class Plugin extends Aware_Plugin implements
                     sendBroadcast(myoPose);
                 }
             });
+
+            //Initialise AWARE instance in plugin
+            Aware.startAWARE(this);
         }
 
         return START_STICKY;
@@ -232,7 +241,7 @@ public class Plugin extends Aware_Plugin implements
             Log.d(MYO_TAG, "STATE CONNECTED");
             Log.d(Plugin.MYO_TAG, "Connected to: " + baseMyo.toString());
             startForeground(1, showNotification("Myo is connected"));
-            if (awareSensor != null) awareSensor.onMyoConnected(baseMyo.getDeviceAddress(), String.valueOf(myo.getBatteryLevel()));
+            if (awareSensor != null) awareSensor.onMyoConnected(baseMyo.getDeviceAddress());
         }
 
         if (state == BaseMyo.ConnectionState.DISCONNECTED) {
@@ -252,10 +261,14 @@ public class Plugin extends Aware_Plugin implements
 
     @Override
     public void onBatteryLevelRead(Myo myo, MyoMsg msg, int batteryLevel) {
-        Log.d(MYO_TAG, "Battery: " + batteryLevel);
+        if (batteryLvl != batteryLevel) {
+            batteryLvl = batteryLevel;
+            if (awareSensor != null) awareSensor.onMyoBatteryChanged(String.valueOf(batteryLvl));
+        }
     }
 
     private long mLastImuUpdate = 0;
+    private long mLastBatteryUpdate = 0;
     @Override
     public void onNewImuData(ImuData imuData) {
         if (System.currentTimeMillis() - mLastImuUpdate > 500) {
@@ -265,6 +278,10 @@ public class Plugin extends Aware_Plugin implements
             gyroData.put("gyroZ", imuData.getGyroData()[2]);
             if (awareSensor != null) awareSensor.onMyoGyroChanged(gyroData);
             mLastImuUpdate = System.currentTimeMillis();
+        }
+
+        if (System.currentTimeMillis() - mLastBatteryUpdate > 120000) {
+            myo.readBatteryLevel(Plugin.this);
         }
     }
 
@@ -284,8 +301,6 @@ public class Plugin extends Aware_Plugin implements
             emg.put("emg7", String.valueOf(data[7]));
             if (awareSensor != null) awareSensor.onMyoEmgChanged(emg);
             mLastEmgUpdate = System.currentTimeMillis();
-            String pose = String.valueOf(myo.getMyoInfo());
-            Log.d(MYO_TAG, pose);
         }
     }
 

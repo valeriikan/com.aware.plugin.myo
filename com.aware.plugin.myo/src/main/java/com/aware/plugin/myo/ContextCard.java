@@ -49,7 +49,7 @@ public class ContextCard implements IContextCard {
         tvGyroX = card.findViewById(R.id.gyroX);
         tvGyroY = card.findViewById(R.id.gyroY);
         tvGyroZ = card.findViewById(R.id.gyroZ);
-        tvMyoPose = card.findViewById(R.id.myoPose);
+        //tvMyoPose = card.findViewById(R.id.myoPose);
         tvEmg0 = card.findViewById(R.id.emg0);
         tvEmg1 = card.findViewById(R.id.emg1);
         tvEmg2 = card.findViewById(R.id.emg2);
@@ -101,6 +101,7 @@ public class ContextCard implements IContextCard {
         myofilter.addAction(Plugin.ACTION_PLUGIN_MYO_CONNECTED);
         myofilter.addAction(Plugin.ACTION_PLUGIN_MYO_CONNECTION_FAILED);
         myofilter.addAction(Plugin.ACTION_PLUGIN_MYO_DISCONNECTED);
+        myofilter.addAction(Plugin.ACTION_PLUGIN_MYO_BATTERY_LEVEL);
         myofilter.addAction(Plugin.ACTION_PLUGIN_MYO_GYROSCOPE);
         myofilter.addAction(Plugin.ACTION_PLUGIN_MYO_EMG);
         //myofilter.addAction(Plugin.ACTION_PLUGIN_MYO_POSE);
@@ -117,7 +118,7 @@ public class ContextCard implements IContextCard {
         public void onReceive(Context context, Intent intent) {
             if (intent.getAction().equalsIgnoreCase(Plugin.ACTION_PLUGIN_MYO_CONNECTED)){
                 macaddress = intent.getStringExtra(Plugin.MYO_MAC_ADDRESS);
-                batteryLvl = intent.getStringExtra(Plugin.MYO_BATTERY_LEVEL);
+                //batteryLvl = intent.getStringExtra(Plugin.MYO_BATTERY_LEVEL);
                 connectBtn.setChecked(true);
                 connectBtn.setEnabled(true);
                 connectBtn.setVisibility(View.VISIBLE);
@@ -143,6 +144,10 @@ public class ContextCard implements IContextCard {
                 myoData.setVisibility(View.INVISIBLE);
                 progress.setVisibility(View.INVISIBLE);
                 tvMyoStatus.setText("Disconnected");
+            }
+            if (intent.getAction().equalsIgnoreCase(Plugin.ACTION_PLUGIN_MYO_BATTERY_LEVEL)){
+                String battery = intent.getStringExtra(Plugin.MYO_BATTERY_LEVEL) + "%";
+                tvMyoBattery.setText(battery);
             }
             if (intent.getAction().equalsIgnoreCase(Plugin.ACTION_PLUGIN_MYO_GYROSCOPE)){
                 ContentValues gyroData = intent.getParcelableExtra(Plugin.MYO_GYROVALUES);
