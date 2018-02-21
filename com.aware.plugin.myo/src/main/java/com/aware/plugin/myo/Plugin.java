@@ -110,7 +110,7 @@ public class Plugin extends Aware_Plugin implements
     private Myo myo = null;
     private EmgProcessor emgProcessor = null;
     private ImuProcessor imuProcessor = null;
-    private List<Myo> myos = null;
+    //private List<Myo> myos = null;
 
     //This function gets called every 5 minutes by AWARE to make sure this plugin is still running.
     @Override
@@ -125,7 +125,7 @@ public class Plugin extends Aware_Plugin implements
             Aware.setSetting(this, Settings.STATUS_PLUGIN_TEMPLATE, true);
 
             //Initialize Connector on first Plugin run
-            if (connector == null) connector = new MyoConnector(this);
+            //if (connector == null) connector = new MyoConnector(this);
 
             //Initialize listener to Button events in ContextCard
             if (myoConnectReceiver == null) {
@@ -215,7 +215,6 @@ public class Plugin extends Aware_Plugin implements
 
         //Removing values
         myoConnectReceiver = null;
-        connector = null;
         removeValues();
 
         Aware.setSetting(this, Settings.STATUS_PLUGIN_TEMPLATE, false);
@@ -226,26 +225,23 @@ public class Plugin extends Aware_Plugin implements
 
     //Myo connection state listener
     @Override
-    public void onConnectionStateChanged(BaseMyo baseMyo, BaseMyo.ConnectionState state) {
+    public void onConnectionStateChanged(final BaseMyo baseMyo, BaseMyo.ConnectionState state) {
 
         if (state == BaseMyo.ConnectionState.CONNECTED) {
             Log.d(MYO_TAG, "STATE CONNECTED");
-            Log.d(Plugin.MYO_TAG, "Connected to: " + baseMyo.toString());
-            startForeground(1, showNotification("Myo is connected"));
-            if (awareSensor != null) awareSensor.onMyoConnected(baseMyo.getDeviceAddress());
 
             //Applying settings to connected Myo
             myo.setConnectionSpeed(BaseMyo.ConnectionSpeed.HIGH);
             myo.writeSleepMode(MyoCmds.SleepMode.NEVER, new Myo.MyoCommandCallback() {
                 @Override
                 public void onCommandDone(Myo myo, MyoMsg msg) {
-                    Log.d(MYO_TAG, "Sleep mode set up");
+                    Log.d(MYO_TAG, "Sleep mode: +");
                 }
             });
             myo.writeUnlock(MyoCmds.UnlockType.HOLD, new Myo.MyoCommandCallback() {
                 @Override
                 public void onCommandDone(Myo myo, MyoMsg msg) {
-                    Log.d(MYO_TAG, "Unlocked");
+                    Log.d(MYO_TAG, "Unlock: +");
                     myo.writeVibrate(MyoCmds.VibrateType.LONG, null);
                 }
             });
@@ -253,13 +249,18 @@ public class Plugin extends Aware_Plugin implements
                 @Override
                 public void onCommandDone(Myo myo, MyoMsg msg) {
                     // Setting up Imu and EMG sensors
-                    Log.d(MYO_TAG, "EMG and Imu set up");
+                    Log.d(MYO_TAG, "EMG and Imu: +");
                     imuProcessor = new ImuProcessor();
                     emgProcessor = new EmgProcessor();
                     imuProcessor.addListener(Plugin.this);
                     emgProcessor.addListener(Plugin.this);
                     myo.addProcessor(imuProcessor);
                     myo.addProcessor(emgProcessor);
+
+                    // Applying UI updates
+                    Log.d(Plugin.MYO_TAG, "Connected to: " + baseMyo.toString());
+                    startForeground(1, showNotification("Myo is connected"));
+                    if (awareSensor != null) awareSensor.onMyoConnected(baseMyo.getDeviceAddress());
                 }
             });
         }
@@ -329,21 +330,20 @@ public class Plugin extends Aware_Plugin implements
 
     // Initializing Connector and connecting to Myo
     private void connectMyo() {
+        if (connector == null) connector = new MyoConnector(this);
         connector.scan(5000, new MyoConnector.ScannerCallback() {
             @Override
             public void onScanFinished(List<Myo> scannedMyos) {
 
-                myos = scannedMyos;
+                Log.d(MYO_TAG, "Found " + scannedMyos.size() + " Myo: " + scannedMyos.toString());
 
-                Log.d(MYO_TAG, "Found " + myos.size() + " Myo: " + myos.toString());
-
-                if (myos.size() == 0) {
+                if (scannedMyos.size() == 0) {
                     Log.d(Plugin.MYO_TAG, "Connection failed, cannot find adjacent Myo");
                     startForeground(1, showNotification("Myo is disconnected"));
                     if (awareSensor != null) awareSensor.onMyoConnectionFailed();
 
                 } else {
-                    myo = myos.get(0);
+                    myo = scannedMyos.get(0);
                     myo.addConnectionListener(Plugin.this);
                     myo.connect();
                 }
@@ -354,16 +354,27 @@ public class Plugin extends Aware_Plugin implements
     // Disconnecting from Myo
     private void disconnectMyo() {
         if (myo != null) {
-            Log.d(MYO_TAG, "Disconnected");
-
+            //Applying settings to disconnected Myo
             myo.setConnectionSpeed(BaseMyo.ConnectionSpeed.BALANCED);
-            myo.writeSleepMode(MyoCmds.SleepMode.NORMAL, null);
-            myo.writeMode(MyoCmds.EmgMode.NONE, MyoCmds.ImuMode.NONE, MyoCmds.ClassifierMode.DISABLED, null);
-            myo.disconnect();
+            myo.writeSleepMode(MyoCmds.SleepMode.NORMAL, new Myo.MyoCommandCallback() {
+                @Override
+                public void onCommandDone(Myo myo, MyoMsg msg) {
+                    Log.d(MYO_TAG, "Sleep mode: -");
+                }
+            });
+            myo.writeMode(MyoCmds.EmgMode.NONE, MyoCmds.ImuMode.NONE, MyoCmds.ClassifierMode.DISABLED, new Myo.MyoCommandCallback() {
+                @Override
+                public void onCommandDone(Myo myo, MyoMsg msg) {
+                    Log.d(MYO_TAG, "EMG and Imu: -");
 
-            startForeground(1, showNotification("Myo is disconnected"));
-            removeValues();
-            if (awareSensor != null) awareSensor.onMyoDisconnected();
+                    // Disconnecting from Myo and aplying UI changes
+                    Log.d(MYO_TAG, "Disconnected");
+                    myo.disconnect();
+                    startForeground(1, showNotification("Myo is disconnected"));
+                    removeValues();
+                    if (awareSensor != null) awareSensor.onMyoDisconnected();
+                }
+            });
         }
     }
 
@@ -382,9 +393,8 @@ public class Plugin extends Aware_Plugin implements
             myo = null;
         }
 
-        if (myos != null) {
-            myos.clear();
-            myos = null;
+        if (connector != null) {
+            connector = null;
         }
     }
 
