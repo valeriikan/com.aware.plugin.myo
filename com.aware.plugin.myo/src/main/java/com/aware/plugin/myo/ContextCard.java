@@ -61,21 +61,31 @@ public class ContextCard implements IContextCard {
             public void onClick(View view) {
 
                 if (connectBtn.isChecked()) {
+                    Log.d(Plugin.MYO_TAG, "ON CLICKED : CONTEXT CARD");
+
                     //Send "toggle_on" broadcast to Plugin
                     Intent intent = new Intent(ContextCard.CONTEXT_ACTION_MYO_CONNECT);
                     intent.putExtra(ContextCard.CONTEXT_TOGGLE_STATUS, ContextCard.CONTEXT_TOGGLE_ON);
                     context.sendBroadcast(intent);
 
+                    //Update views to "on" state
+                    connectBtn.setEnabled(false);
+                    connectBtn.setVisibility(View.INVISIBLE);
+                    progress.setVisibility(View.VISIBLE);
+                    tvMyoStatus.setText("Connecting...");
+
                 } else {
+                    Log.d(Plugin.MYO_TAG, "OFF CLICKED : CONTEXT CARD");
+
                     //Send "toggle_off" broadcast to Plugin
                     Intent intent = new Intent(ContextCard.CONTEXT_ACTION_MYO_CONNECT);
                     intent.putExtra(ContextCard.CONTEXT_TOGGLE_STATUS, ContextCard.CONTEXT_TOGGLE_OFF);
                     context.sendBroadcast(intent);
 
                     //Update views to "off" state
-                    Log.d(Plugin.MYO_TAG, "OFF CLICKED");
                     connectBtn.setEnabled(false);
                     connectBtn.setVisibility(View.INVISIBLE);
+                    myoData.setVisibility(View.INVISIBLE);
                     progress.setVisibility(View.VISIBLE);
                     tvMyoStatus.setText("Disconnecting...");
                 }
@@ -90,7 +100,6 @@ public class ContextCard implements IContextCard {
         myofilter.addAction(Plugin.ACTION_PLUGIN_MYO_BATTERY_LEVEL);
         myofilter.addAction(Plugin.ACTION_PLUGIN_MYO_GYROSCOPE);
         myofilter.addAction(Plugin.ACTION_PLUGIN_MYO_EMG);
-        myofilter.addAction(Plugin.ACTION_PLUGIN_BLUETOOTH_CONNECTION);
         context.registerReceiver(myoListener, myofilter);
 
         //Return the card to AWARE/apps
@@ -116,7 +125,6 @@ public class ContextCard implements IContextCard {
                 connectBtn.setChecked(false);
                 connectBtn.setEnabled(true);
                 connectBtn.setVisibility(View.VISIBLE);
-                myoData.setVisibility(View.INVISIBLE);
                 progress.setVisibility(View.INVISIBLE);
                 tvMyoStatus.setText("Connect to Myo first");
             }
@@ -149,19 +157,6 @@ public class ContextCard implements IContextCard {
                 tvEmg6.setText(gyroData.getAsString("emg6"));
                 tvEmg7.setText(gyroData.getAsString("emg7"));
 
-            }
-            if (intent.getAction().equalsIgnoreCase(Plugin.ACTION_PLUGIN_BLUETOOTH_CONNECTION)){
-                Boolean bluetoothEnabled = intent.getBooleanExtra(Plugin.DEVICE_BLUETOOTH, false);
-                if (bluetoothEnabled) {
-                    Log.d(Plugin.MYO_TAG, "ON CLICKED");
-                    connectBtn.setEnabled(false);
-                    connectBtn.setVisibility(View.INVISIBLE);
-                    progress.setVisibility(View.VISIBLE);
-                    tvMyoStatus.setText("Connecting...");
-                } else {
-                    connectBtn.setChecked(false);
-                    Toast.makeText(context, "Turn on bluetooth on your device first", Toast.LENGTH_SHORT).show();
-                }
             }
         }
     }

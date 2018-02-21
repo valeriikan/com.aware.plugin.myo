@@ -33,15 +33,13 @@ public class Plugin extends Aware_Plugin implements
         EmgProcessor.EmgDataListener,
         Myo.BatteryCallback,
         ImuProcessor.ImuDataListener {
-    
+
     public static final String ACTION_PLUGIN_MYO_CONNECTED = "ACTION_PLUGIN_MYO_CONNECTED";
     public static final String ACTION_PLUGIN_MYO_CONNECTION_FAILED = "ACTION_PLUGIN_MYO_CONNECTION_FAILED";
     public static final String ACTION_PLUGIN_MYO_DISCONNECTED = "ACTION_PLUGIN_MYO_DISCONNECTED";
     public static final String ACTION_PLUGIN_MYO_BATTERY_LEVEL = "ACTION_PLUGIN_MYO_BATTERY_LEVEL";
     public static final String ACTION_PLUGIN_MYO_GYROSCOPE = "ACTION_PLUGIN_MYO_GYROSCOPE";
     public static final String ACTION_PLUGIN_MYO_EMG = "ACTION_PLUGIN_MYO_EMG";
-    public static final String ACTION_PLUGIN_BLUETOOTH_CONNECTION = "ACTION_PLUGIN_BLUETOOTH_CONNECTION";
-    public static final String DEVICE_BLUETOOTH = "DEVICE_BLUETOOTH";
     public static final String MYO_MAC_ADDRESS = "MYO_MAC_ADDRESS";
     public static final String MYO_BATTERY_LEVEL = "MYO_BATTERY_LEVEL";
     public static final String MYO_GYROVALUES = "MYO_GYROVALUES";
@@ -55,7 +53,7 @@ public class Plugin extends Aware_Plugin implements
         //This allows plugin data to be synced on demand from broadcast Aware#ACTION_AWARE_SYNC_DATA
         AUTHORITY = Provider.getAuthority(this);
 
-        TAG = "AWARE::"+getResources().getString(R.string.app_name);
+        TAG = "AWARE::" + getResources().getString(R.string.app_name);
 
         /**
          * Plugins share their current status, i.e., context using this method.
@@ -75,15 +73,25 @@ public class Plugin extends Aware_Plugin implements
         REQUIRED_PERMISSIONS.add(Manifest.permission.BLUETOOTH_ADMIN);
         REQUIRED_PERMISSIONS.add(Manifest.permission.ACCESS_COARSE_LOCATION);
         REQUIRED_PERMISSIONS.add(Manifest.permission.ACCESS_FINE_LOCATION);
+
+        //Request to turn bluetooth on
+        BluetoothAdapter btAdapter = BluetoothAdapter.getDefaultAdapter();
+        if (btAdapter != null && !btAdapter.isEnabled()) {
+            Intent enableBT = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
+            enableBT.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(enableBT);
+        }
     }
 
     /**
      * Allow callback to other applications when data is stored in provider
      */
     private static AWARESensorObserver awareSensor;
+
     public static void setSensorObserver(AWARESensorObserver observer) {
         awareSensor = observer;
     }
+
     public static AWARESensorObserver getSensorObserver() {
         return awareSensor;
     }
@@ -95,16 +103,14 @@ public class Plugin extends Aware_Plugin implements
         void onMyoBatteryChanged(String battery);
         void onMyoGyroChanged(ContentValues data);
         void onMyoEmgChanged(ContentValues data);
-        void onBluetoothConnection(Boolean connection);
     }
 
     private BroadcastReceiver myoConnectReceiver = null;
-    private MyoConnector connector=null;
+    private MyoConnector connector = null;
     private Myo myo = null;
     private EmgProcessor emgProcessor = null;
     private ImuProcessor imuProcessor = null;
     private List<Myo> myos = null;
-    private int batteryLvl = -100;
 
     //This function gets called every 5 minutes by AWARE to make sure this plugin is still running.
     @Override
@@ -128,18 +134,11 @@ public class Plugin extends Aware_Plugin implements
                 myoConnectReceiver = new BroadcastReceiver() {
                     @Override
                     public void onReceive(Context context, Intent intent) {
-
-                        // Checks the toggle status, if it equals "on" then checks for bluetooth activated
+                        // Checks the toggle status
                         String toggleStatus = intent.getStringExtra(ContextCard.CONTEXT_TOGGLE_STATUS);
                         if (toggleStatus.equals(ContextCard.CONTEXT_TOGGLE_ON)) {
-                            BluetoothAdapter mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-                            Boolean connection = mBluetoothAdapter.isEnabled();
-                            if (awareSensor != null) awareSensor.onBluetoothConnection(connection);
-                            if (connection) {
-                                // Bluetooth is enabled
-                                Log.d(Plugin.MYO_TAG, "Connecting to Myo...");
-                                connectMyo();
-                            }
+                            Log.d(Plugin.MYO_TAG, "Connecting to Myo...");
+                            connectMyo();
                         }
 
                         if (toggleStatus.equals(ContextCard.CONTEXT_TOGGLE_OFF)) {
@@ -194,13 +193,6 @@ public class Plugin extends Aware_Plugin implements
                     myoEmg.putExtra(Plugin.MYO_EMG, data);
                     sendBroadcast(myoEmg);
                 }
-
-                @Override
-                public void onBluetoothConnection(Boolean connected) {
-                    Intent bluetoothConnection = new Intent(Plugin.ACTION_PLUGIN_BLUETOOTH_CONNECTION);
-                    bluetoothConnection.putExtra(Plugin.DEVICE_BLUETOOTH, connected);
-                    sendBroadcast(bluetoothConnection);
-                }
             });
 
             //Initialise AWARE instance in plugin
@@ -215,19 +207,16 @@ public class Plugin extends Aware_Plugin implements
         super.onDestroy();
 
         //Turn off the sync-adapter if part of a study
-        if (Aware.isStudy(this) && (getApplicationContext().getPackageName().equalsIgnoreCase("com.aware.phone") || getApplicationContext().getResources().getBoolean(R.bool.standalone))) {
-            ContentResolver.removePeriodicSync(
-                    Aware.getAWAREAccount(this),
-                    Provider.getAuthority(this),
-                    Bundle.EMPTY
-            );
-        }
+        ContentResolver.removePeriodicSync(
+                Aware.getAWAREAccount(this),
+                Provider.getAuthority(this),
+                Bundle.EMPTY
+        );
 
         //Removing values
         myoConnectReceiver = null;
         connector = null;
-        myo.removeConnectionListener(this);
-        myo = null;
+        removeValues();
 
         Aware.setSetting(this, Settings.STATUS_PLUGIN_TEMPLATE, false);
 
@@ -245,28 +234,48 @@ public class Plugin extends Aware_Plugin implements
             startForeground(1, showNotification("Myo is connected"));
             if (awareSensor != null) awareSensor.onMyoConnected(baseMyo.getDeviceAddress());
 
-            myo.writeMode(MyoCmds.EmgMode.FILTERED, MyoCmds.ImuMode.RAW, MyoCmds.ClassifierMode.DISABLED, null);
-            setMyoSensors();
+            //Applying settings to connected Myo
+            myo.setConnectionSpeed(BaseMyo.ConnectionSpeed.HIGH);
+            myo.writeSleepMode(MyoCmds.SleepMode.NEVER, new Myo.MyoCommandCallback() {
+                @Override
+                public void onCommandDone(Myo myo, MyoMsg msg) {
+                    Log.d(MYO_TAG, "Sleep mode set up");
+                }
+            });
+            myo.writeUnlock(MyoCmds.UnlockType.HOLD, new Myo.MyoCommandCallback() {
+                @Override
+                public void onCommandDone(Myo myo, MyoMsg msg) {
+                    Log.d(MYO_TAG, "Unlocked");
+                    myo.writeVibrate(MyoCmds.VibrateType.LONG, null);
+                }
+            });
+            myo.writeMode(MyoCmds.EmgMode.FILTERED, MyoCmds.ImuMode.RAW, MyoCmds.ClassifierMode.DISABLED, new Myo.MyoCommandCallback() {
+                @Override
+                public void onCommandDone(Myo myo, MyoMsg msg) {
+                    // Setting up Imu and EMG sensors
+                    Log.d(MYO_TAG, "EMG and Imu set up");
+                    imuProcessor = new ImuProcessor();
+                    emgProcessor = new EmgProcessor();
+                    imuProcessor.addListener(Plugin.this);
+                    emgProcessor.addListener(Plugin.this);
+                    myo.addProcessor(imuProcessor);
+                    myo.addProcessor(emgProcessor);
+                }
+            });
         }
 
         if (state == BaseMyo.ConnectionState.DISCONNECTED) {
             Log.d(MYO_TAG, "STATE DISCONNECTED");
             Log.d(Plugin.MYO_TAG, "Disconnected from Myo: " + baseMyo.toString());
             startForeground(1, showNotification("Myo is disconnected"));
-            myos.clear();
-            Log.d(MYO_TAG, String.valueOf(myos.size()));
-            myo.removeConnectionListener(this);
-            myo.removeProcessor(emgProcessor);
-            myo.removeProcessor(imuProcessor);
-            emgProcessor = null;
-            imuProcessor = null;
-            myo = null;
-            myos = null;
             if (awareSensor != null) awareSensor.onMyoDisconnected();
+
+            removeValues();
         }
     }
 
     //Myo battery level listener
+    private int batteryLvl = -100;
     @Override
     public void onBatteryLevelRead(Myo myo, MyoMsg msg, int batteryLevel) {
         if (batteryLvl != batteryLevel) {
@@ -280,6 +289,7 @@ public class Plugin extends Aware_Plugin implements
     private long mLastBatteryUpdate = 0;
     @Override
     public void onNewImuData(ImuData imuData) {
+        // Check for Gyro updates twice per second
         if (System.currentTimeMillis() - mLastImuUpdate > 500) {
             ContentValues gyroData = new ContentValues();
             gyroData.put("gyroX", imuData.getGyroData()[0]);
@@ -289,8 +299,10 @@ public class Plugin extends Aware_Plugin implements
             mLastImuUpdate = System.currentTimeMillis();
         }
 
+        // Check for battery level every 2 minutes
         if (System.currentTimeMillis() - mLastBatteryUpdate > 120000) {
             myo.readBatteryLevel(Plugin.this);
+            mLastBatteryUpdate = System.currentTimeMillis();
         }
     }
 
@@ -298,6 +310,7 @@ public class Plugin extends Aware_Plugin implements
     private long mLastEmgUpdate = 0;
     @Override
     public void onNewEmgData(EmgData emgData) {
+        // Check for Emg updates twice per second
         if (System.currentTimeMillis() - mLastEmgUpdate > 500) {
             byte[] data = emgData.getData();
             ContentValues emg = new ContentValues();
@@ -322,7 +335,7 @@ public class Plugin extends Aware_Plugin implements
 
                 myos = scannedMyos;
 
-                Log.d(MYO_TAG, "ListMyo: " + myos.size() +" : "+ myos.toString());
+                Log.d(MYO_TAG, "Found " + myos.size() + " Myo: " + myos.toString());
 
                 if (myos.size() == 0) {
                     Log.d(Plugin.MYO_TAG, "Connection failed, cannot find adjacent Myo");
@@ -333,14 +346,6 @@ public class Plugin extends Aware_Plugin implements
                     myo = myos.get(0);
                     myo.addConnectionListener(Plugin.this);
                     myo.connect();
-                    //myo.writeMode(MyoCmds.EmgMode.FILTERED, MyoCmds.ImuMode.RAW, MyoCmds.ClassifierMode.DISABLED, null);
-                    myo.writeUnlock(MyoCmds.UnlockType.HOLD, new Myo.MyoCommandCallback() {
-                        @Override
-                        public void onCommandDone(Myo myo, MyoMsg msg) {
-                            myo.writeVibrate(MyoCmds.VibrateType.LONG, null);
-                        }
-                    });
-                    //setMyoSensors();
                 }
             }
         });
@@ -349,25 +354,42 @@ public class Plugin extends Aware_Plugin implements
     // Disconnecting from Myo
     private void disconnectMyo() {
         if (myo != null) {
+            Log.d(MYO_TAG, "Disconnected");
+
+            myo.setConnectionSpeed(BaseMyo.ConnectionSpeed.BALANCED);
+            myo.writeSleepMode(MyoCmds.SleepMode.NORMAL, null);
+            myo.writeMode(MyoCmds.EmgMode.NONE, MyoCmds.ImuMode.NONE, MyoCmds.ClassifierMode.DISABLED, null);
             myo.disconnect();
+
+            startForeground(1, showNotification("Myo is disconnected"));
+            removeValues();
+            if (awareSensor != null) awareSensor.onMyoDisconnected();
         }
     }
 
-    // Setting up Imu and EMG sensors
-    private void setMyoSensors() {
-        Log.d(MYO_TAG, "Setting up sensors");
-        imuProcessor = new ImuProcessor();
-        imuProcessor.addListener(Plugin.this);
-        myo.addProcessor(imuProcessor);
+    // Removing values when Myo is detached
+    private void removeValues() {
+        if (myo != null) {
+            if (emgProcessor != null) {
+                myo.removeProcessor(emgProcessor);
+                emgProcessor = null;
+            }
+            if (imuProcessor != null) {
+                myo.removeProcessor(imuProcessor);
+                imuProcessor = null;
+            }
+            myo.removeConnectionListener(this);
+            myo = null;
+        }
 
-        emgProcessor = new EmgProcessor();
-        emgProcessor.addListener(Plugin.this);
-        myo.addProcessor(emgProcessor);
+        if (myos != null) {
+            myos.clear();
+            myos = null;
+        }
     }
 
-    //Notification set up
+    // Notification set up
     private Notification showNotification(String notifyText) {
-
         return new Notification.Builder(getApplicationContext())
                 .setSmallIcon(R.drawable.ic_myo)
                 .setOngoing(true)
