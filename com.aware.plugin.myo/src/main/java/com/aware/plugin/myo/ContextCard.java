@@ -5,6 +5,7 @@ import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -26,12 +27,17 @@ public class ContextCard implements IContextCard {
     static final String CONTEXT_TOGGLE_STATUS = "CONTEXT_TOGGLE_STATUS";
     static final String CONTEXT_TOGGLE_ON = "CONTEXT_TOGGLE_ON";
     static final String CONTEXT_TOGGLE_OFF = "CONTEXT_TOGGLE_OFF";
+    private static final String MYO_SHARED_PREFERENCES= "MYO_SHARED_PREFERENCES";
+    private static final String MYO_BATTERY_LEVEL = "MYO_BATTERY_LEVEL";
+    private static final String MYO_MAC_ADDRESS= "MYO_MAC_ADDRESS";
 
     private TextView tvMyoStatus, tvMyoMac, tvMyoBattery, tvGyroX, tvGyroY, tvGyroZ,
                         tvEmg0, tvEmg1, tvEmg2, tvEmg3, tvEmg4, tvEmg5, tvEmg6, tvEmg7;
     private ToggleButton connectBtn = null;
     private ProgressBar progress = null;
     private RelativeLayout myoData;
+    private SharedPreferences myoPref = null;
+    private String macAddress = null, batteryLvl = null;
 
 
     @Override
@@ -102,6 +108,11 @@ public class ContextCard implements IContextCard {
         myofilter.addAction(Plugin.ACTION_PLUGIN_MYO_EMG);
         context.registerReceiver(myoListener, myofilter);
 
+        //Read SharedPreferences for last Mac address and battery level
+        myoPref = context.getSharedPreferences(MYO_SHARED_PREFERENCES, Context.MODE_PRIVATE);
+        macAddress = myoPref.getString(MYO_MAC_ADDRESS, "null");
+        batteryLvl = myoPref.getString(MYO_BATTERY_LEVEL, "null");
+
         //Return the card to AWARE/apps
         return card;
     }
@@ -119,6 +130,11 @@ public class ContextCard implements IContextCard {
                 progress.setVisibility(View.INVISIBLE);
                 tvMyoStatus.setText("Connected to Myo");
                 tvMyoMac.setText(intent.getStringExtra(Plugin.MYO_MAC_ADDRESS));
+
+                myoPref = context.getSharedPreferences(MYO_SHARED_PREFERENCES, Context.MODE_PRIVATE);
+                SharedPreferences.Editor ed = myoPref.edit();
+                ed.putString(MYO_MAC_ADDRESS, intent.getStringExtra(Plugin.MYO_MAC_ADDRESS)).commit();
+
             }
             if (intent.getAction().equalsIgnoreCase(Plugin.ACTION_PLUGIN_MYO_CONNECTION_FAILED)){
                 Toast.makeText(context, "Connection failed, please check your Myo", Toast.LENGTH_SHORT).show();
@@ -139,8 +155,15 @@ public class ContextCard implements IContextCard {
             if (intent.getAction().equalsIgnoreCase(Plugin.ACTION_PLUGIN_MYO_BATTERY_LEVEL)){
                 String battery = intent.getStringExtra(Plugin.MYO_BATTERY_LEVEL) + "%";
                 tvMyoBattery.setText(battery);
+
+                myoPref = context.getSharedPreferences(MYO_SHARED_PREFERENCES, Context.MODE_PRIVATE);
+                SharedPreferences.Editor ed = myoPref.edit();
+                ed.putString(MYO_BATTERY_LEVEL, battery).commit();
             }
             if (intent.getAction().equalsIgnoreCase(Plugin.ACTION_PLUGIN_MYO_GYROSCOPE)){
+
+                updateViews();
+
                 ContentValues gyroData = intent.getParcelableExtra(Plugin.MYO_GYROVALUES);
                 tvGyroX.setText(gyroData.getAsString("gyroX"));
                 tvGyroY.setText(gyroData.getAsString("gyroY"));
@@ -156,8 +179,17 @@ public class ContextCard implements IContextCard {
                 tvEmg5.setText(gyroData.getAsString("emg5"));
                 tvEmg6.setText(gyroData.getAsString("emg6"));
                 tvEmg7.setText(gyroData.getAsString("emg7"));
-
             }
+        }
+    }
+
+    private void updateViews() {
+        if (myoData.getVisibility() == View.INVISIBLE) {
+            connectBtn.setChecked(true);
+            myoData.setVisibility(View.VISIBLE);
+            tvMyoStatus.setText("Connected to Myo");
+            tvMyoBattery.setText(batteryLvl);
+            tvMyoMac.setText(macAddress);
         }
     }
 }

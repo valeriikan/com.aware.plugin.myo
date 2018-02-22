@@ -301,7 +301,7 @@ public class Plugin extends Aware_Plugin implements
         }
 
         // Check for battery level every 2 minutes
-        if (System.currentTimeMillis() - mLastBatteryUpdate > 120000) {
+        if (System.currentTimeMillis() - mLastBatteryUpdate > 60000) {
             myo.readBatteryLevel(Plugin.this);
             mLastBatteryUpdate = System.currentTimeMillis();
         }
