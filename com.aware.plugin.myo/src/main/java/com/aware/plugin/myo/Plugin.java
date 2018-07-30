@@ -2,21 +2,30 @@ package com.aware.plugin.myo;
 
 import android.Manifest;
 import android.app.Notification;
+import android.app.PendingIntent;
 import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.os.AsyncTask;
 import android.os.Bundle;
+import android.os.Handler;
+import android.support.v4.app.NotificationCompat;
+import android.support.v4.app.RemoteInput;
+import android.support.v4.content.PermissionChecker;
 import android.util.Log;
 
 import com.aware.Aware;
 import com.aware.Aware_Preferences;
 import com.aware.utils.Aware_Plugin;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.TimerTask;
 
 import eu.darken.myolib.BaseMyo;
 import eu.darken.myolib.Myo;
@@ -34,17 +43,36 @@ public class Plugin extends Aware_Plugin implements
         Myo.BatteryCallback,
         ImuProcessor.ImuDataListener {
 
-    public static final String ACTION_PLUGIN_MYO_CONNECTED = "ACTION_PLUGIN_MYO_CONNECTED";
-    public static final String ACTION_PLUGIN_MYO_CONNECTION_FAILED = "ACTION_PLUGIN_MYO_CONNECTION_FAILED";
-    public static final String ACTION_PLUGIN_MYO_DISCONNECTED = "ACTION_PLUGIN_MYO_DISCONNECTED";
-    public static final String ACTION_PLUGIN_MYO_BATTERY_LEVEL = "ACTION_PLUGIN_MYO_BATTERY_LEVEL";
-    public static final String ACTION_PLUGIN_MYO_GYROSCOPE = "ACTION_PLUGIN_MYO_GYROSCOPE";
-    public static final String ACTION_PLUGIN_MYO_EMG = "ACTION_PLUGIN_MYO_EMG";
-    public static final String MYO_MAC_ADDRESS = "MYO_MAC_ADDRESS";
-    public static final String MYO_BATTERY_LEVEL = "MYO_BATTERY_LEVEL";
-    public static final String MYO_GYROVALUES = "MYO_GYROVALUES";
-    public static final String MYO_EMG = "MYO_EMG";
-    public static final String MYO_TAG = "MYO_TAG";
+
+    // Notification component variables
+    private NotificationCompat.Builder nBuilder;
+    private NotificationCompat.Action connectMac;
+    private PendingIntent connectIntent;
+    private PendingIntent disconnectIntent;
+    private PendingIntent connectMacIntent;
+    private BroadcastReceiver notifyReceiver = null;
+
+    // Myo variables
+    private MyoConnector connector = null;
+    private Myo myo = null;
+    private EmgProcessor emgProcessor = null;
+    private ImuProcessor imuProcessor = null;
+    //private List<Myo> myos = null;
+    private boolean connected = false;
+
+    // Bluetooth variables for MAC connection
+    private BluetoothAdapter bluetoothAdapter;
+    private BluetoothDevice bt;
+
+    private static final String MYO_TAG = "MYO_TAG";
+    private static final String MYO_MAC_ADDRESS = "MYO_MAC_ADDRESS";
+
+    private static final String INTENT_CONNECT = "CONNECT";
+    private static final String INTENT_CONNECT_MAC = "CONNECT_MAC";
+    private static final String INTENT_DISCONNECT = "DISCONNECT";
+
+    private static final int NOTIFICATION_ID = 1;
+
 
     @Override
     public void onCreate() {
@@ -75,49 +103,61 @@ public class Plugin extends Aware_Plugin implements
         REQUIRED_PERMISSIONS.add(Manifest.permission.ACCESS_FINE_LOCATION);
 
         //Request to turn bluetooth on
-        BluetoothAdapter btAdapter = BluetoothAdapter.getDefaultAdapter();
-        if (btAdapter != null && !btAdapter.isEnabled()) {
+        if (bluetoothAdapter == null) bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+        if (bluetoothAdapter != null && !bluetoothAdapter.isEnabled()) {
             Intent enableBT = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
             enableBT.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(enableBT);
         }
+
+        // Notification builder components
+        nBuilder = new NotificationCompat.Builder(getApplicationContext())
+                .setSmallIcon(R.drawable.ic_myo)
+                .setOngoing(true)
+                .setPriority(Notification.PRIORITY_MAX)
+                .setContentTitle(getString(R.string.notification_title));
+
+        // Broadcast event intents
+        connectIntent = PendingIntent.getBroadcast(getApplicationContext(), 0, new Intent(INTENT_CONNECT), PendingIntent.FLAG_CANCEL_CURRENT);
+        disconnectIntent = PendingIntent.getBroadcast(getApplicationContext(), 0, new Intent(INTENT_DISCONNECT), PendingIntent.FLAG_CANCEL_CURRENT);
+        connectMacIntent = PendingIntent.getBroadcast(getApplicationContext(), 0, new Intent(INTENT_CONNECT_MAC), PendingIntent.FLAG_CANCEL_CURRENT);
+
+        // Connect via MAC action set up
+        connectMac = new NotificationCompat.Action.Builder
+                (0, getString(R.string.notification_action_connect_mac), connectMacIntent)
+                .addRemoteInput(new RemoteInput.Builder(MYO_MAC_ADDRESS)
+                        .setLabel(getString(R.string.type_mac))
+                        .build())
+                .build();
+
+        //Show notification to control plugin functionalities
+        nBuilder.setContentText(getString(R.string.notification_state_disconnected))
+                .setStyle(new NotificationCompat.BigTextStyle().bigText(getString(R.string.notification_state_disconnected)))
+                .mActions.clear();
+        nBuilder.addAction(0, getString(R.string.notification_action_connect), connectIntent).addAction(connectMac);
+        startForeground(NOTIFICATION_ID, nBuilder.getNotification());
+        nBuilder.setStyle(null);
     }
-
-    /**
-     * Allow callback to other applications when data is stored in provider
-     */
-    private static AWARESensorObserver awareSensor;
-
-    public static void setSensorObserver(AWARESensorObserver observer) {
-        awareSensor = observer;
-    }
-
-    public static AWARESensorObserver getSensorObserver() {
-        return awareSensor;
-    }
-
-    public interface AWARESensorObserver {
-        void onMyoConnected(String macaddress);
-        void onMyoConnectionFailed();
-        void onMyoDisconnected();
-        void onMyoBatteryChanged(String battery);
-        void onMyoGyroChanged(ContentValues data);
-        void onMyoEmgChanged(ContentValues data);
-    }
-
-    private BroadcastReceiver myoConnectReceiver = null;
-    private MyoConnector connector = null;
-    private Myo myo = null;
-    private EmgProcessor emgProcessor = null;
-    private ImuProcessor imuProcessor = null;
-    //private List<Myo> myos = null;
 
     //This function gets called every 5 minutes by AWARE to make sure this plugin is still running.
     @Override
     public int onStartCommand(Intent intent, int flags, final int startId) {
         super.onStartCommand(intent, flags, startId);
 
-        if (PERMISSIONS_OK) {
+        // List of required permission
+        ArrayList<String> REQUIRED_PERMISSIONS = new ArrayList<>();
+        REQUIRED_PERMISSIONS.add(Manifest.permission.ACCESS_FINE_LOCATION);
+        REQUIRED_PERMISSIONS.add(Manifest.permission.ACCESS_COARSE_LOCATION);
+
+        boolean permissions_ok = true;
+        for (String p : REQUIRED_PERMISSIONS) {
+            if (PermissionChecker.checkSelfPermission(this, p) != PermissionChecker.PERMISSION_GRANTED) {
+                permissions_ok = false;
+                break;
+            }
+        }
+
+        if (permissions_ok) {
 
             DEBUG = Aware.getSetting(this, Aware_Preferences.DEBUG_FLAG).equals("true");
 
@@ -125,75 +165,42 @@ public class Plugin extends Aware_Plugin implements
             Aware.setSetting(this, Settings.STATUS_PLUGIN_TEMPLATE, true);
 
             //Initialize Connector on first Plugin run
-            //if (connector == null) connector = new MyoConnector(this);
+            if (connector == null) connector = new MyoConnector(getApplicationContext());
 
-            //Initialize listener to Button events in ContextCard
-            if (myoConnectReceiver == null) {
+            //BroadcastReceiver to listen Notification click events
+            if (notifyReceiver == null) {
 
-                startForeground(1, showNotification("Myo is not connected"));
-                myoConnectReceiver = new BroadcastReceiver() {
+                notifyReceiver = new BroadcastReceiver() {
                     @Override
                     public void onReceive(Context context, Intent intent) {
-                        // Checks the toggle status
-                        String toggleStatus = intent.getStringExtra(ContextCard.CONTEXT_TOGGLE_STATUS);
-                        if (toggleStatus.equals(ContextCard.CONTEXT_TOGGLE_ON)) {
-                            Log.d(Plugin.MYO_TAG, "Connecting to Myo...");
+                        Log.d(MYO_TAG, "BROADCAST RECEIVED: ");
+
+                        if (!connected && intent.getAction().equals(INTENT_CONNECT)) {
+
+                            Log.d(MYO_TAG, "BROADCAST: CONNECT");
                             connectMyo();
                         }
 
-                        if (toggleStatus.equals(ContextCard.CONTEXT_TOGGLE_OFF)) {
-                            Log.d(Plugin.MYO_TAG, "Disonnecting from Myo...");
+                        if (!connected && intent.getAction().equals(INTENT_CONNECT_MAC)) {
+
+                            Log.d(MYO_TAG, "BROADCAST: CONNECT VIA MAC");
+                            connectMacMyo(RemoteInput.getResultsFromIntent(intent).getCharSequence(MYO_MAC_ADDRESS).toString());
+                        }
+
+                        if (connected && intent.getAction().equals(INTENT_DISCONNECT)) {
+
+                            Log.d(MYO_TAG, "BROADCAST: DISCONNECT");
                             disconnectMyo();
                         }
                     }
                 };
 
-                IntentFilter myoConnectFilter = new IntentFilter(ContextCard.CONTEXT_ACTION_MYO_CONNECT);
-                registerReceiver(myoConnectReceiver, myoConnectFilter);
+                IntentFilter myoConnectFilter = new IntentFilter();
+                myoConnectFilter.addAction(INTENT_CONNECT);
+                myoConnectFilter.addAction(INTENT_CONNECT_MAC);
+                myoConnectFilter.addAction(INTENT_DISCONNECT);
+                registerReceiver(notifyReceiver, myoConnectFilter);
             }
-
-            //Sensor observer set up
-            setSensorObserver(new AWARESensorObserver() {
-                @Override
-                public void onMyoConnected(String macaddress) {
-                    Intent myoConnected = new Intent(Plugin.ACTION_PLUGIN_MYO_CONNECTED);
-                    myoConnected.putExtra(Plugin.MYO_MAC_ADDRESS, macaddress);
-                    sendBroadcast(myoConnected);
-                }
-
-                @Override
-                public void onMyoConnectionFailed() {
-                    Intent myoConnectionFailed = new Intent(Plugin.ACTION_PLUGIN_MYO_CONNECTION_FAILED);
-                    sendBroadcast(myoConnectionFailed);
-                }
-
-                @Override
-                public void onMyoDisconnected() {
-                    Intent myoDisconnected = new Intent(Plugin.ACTION_PLUGIN_MYO_DISCONNECTED);
-                    sendBroadcast(myoDisconnected);
-                }
-
-                @Override
-                public void onMyoBatteryChanged(String battery) {
-                    Intent myoBattery = new Intent(Plugin.ACTION_PLUGIN_MYO_BATTERY_LEVEL);
-                    myoBattery.putExtra(Plugin.MYO_BATTERY_LEVEL, battery);
-                    sendBroadcast(myoBattery);
-                }
-
-                @Override
-                public void onMyoGyroChanged(ContentValues data) {
-                    Intent myoGyroscope = new Intent(Plugin.ACTION_PLUGIN_MYO_GYROSCOPE);
-                    myoGyroscope.putExtra(Plugin.MYO_GYROVALUES, data);
-                    sendBroadcast(myoGyroscope);
-                }
-
-                @Override
-                public void onMyoEmgChanged(ContentValues data) {
-                    Intent myoEmg = new Intent(Plugin.ACTION_PLUGIN_MYO_EMG);
-                    myoEmg.putExtra(Plugin.MYO_EMG, data);
-                    sendBroadcast(myoEmg);
-                }
-            });
 
             //Initialise AWARE instance in plugin
             Aware.startAWARE(this);
@@ -201,6 +208,149 @@ public class Plugin extends Aware_Plugin implements
 
         return START_STICKY;
     }
+
+
+    // Connecting to Myo
+    private void connectMyo() {
+
+        // Update notification status
+        nBuilder.setContentText(getString(R.string.notification_state_scanning_myos))
+                .setProgress(0,0,true)
+                .mActions.clear();
+        startForeground(NOTIFICATION_ID, nBuilder.getNotification());
+
+        // First try to connect with autoscanning
+        if (connector == null) connector = new MyoConnector(this);
+
+        connector.scan(15000, new MyoConnector.ScannerCallback() {
+            @Override
+            public void onScanFinished(List<Myo> scannedMyos) {
+                Log.d(MYO_TAG, "Found " + scannedMyos.size() + " Myo: " + scannedMyos.toString());
+
+                // offer either to scan again or to connect straight wih MAC if no Myos were found
+                if (scannedMyos.size() == 0) {
+                    Log.d(Plugin.MYO_TAG, "No adjacent Myos found");
+
+                    // inflate inline input for N+ versions
+                    // TODO for <N versions
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                        nBuilder.setContentText(getString(R.string.notification_state_no_myos_found))
+                                .setStyle(new NotificationCompat.BigTextStyle().bigText(getString(R.string.notification_state_no_myos_found)))
+                                .setProgress(0,0,false)
+                                .mActions.clear();
+                        nBuilder.addAction(0, getString(R.string.notification_action_connect), connectIntent).addAction(connectMac);
+                        startForeground(NOTIFICATION_ID, nBuilder.getNotification());
+                        nBuilder.setStyle(null);
+                    }
+
+                } else {
+                    // connect to found Myo
+                    // Update notification status
+                    nBuilder.setContentText(getString(R.string.notification_state_connecting))
+                            .setProgress(0,0,true)
+                            .mActions.clear();
+                    startForeground(NOTIFICATION_ID, nBuilder.getNotification());
+
+                    myo = scannedMyos.get(0);
+                    myo.addConnectionListener(Plugin.this);
+                    myo.connect();
+                }
+            }
+        });
+    }
+
+    // Connecting to Myo via Mac
+    private void connectMacMyo(String mac) {
+
+        nBuilder.setContentText(getString(R.string.notification_state_connecting))
+                .setProgress(0,0,true)
+                .mActions.clear();
+        startForeground(NOTIFICATION_ID, nBuilder.getNotification());
+
+        //"C4:EF:50:4D:29:BD"
+        if (bluetoothAdapter == null) bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+        bt = bluetoothAdapter.getRemoteDevice(mac);
+
+        myo = new Myo(getApplicationContext(), bt);
+        myo.addConnectionListener(Plugin.this);
+        myo.connect();
+
+        // Remove values and set notification to default state if not connected after 100 seconds
+        final Handler handler = new Handler();
+        final Runnable r = new Runnable() {
+            public void run() {
+                if (!connected) {
+                    nBuilder.setContentText(getString(R.string.notification_state_disconnected))
+                            .setStyle(new NotificationCompat.BigTextStyle().bigText(getString(R.string.notification_state_disconnected)))
+                            .setProgress(0,0,false)
+                            .mActions.clear();
+                    nBuilder.addAction(0, getString(R.string.notification_action_connect), connectIntent).addAction(connectMac);
+                    startForeground(NOTIFICATION_ID, nBuilder.getNotification());
+                    nBuilder.setStyle(null);
+
+                    bluetoothAdapter = null;
+                    bt = null;
+                    myo = null;
+                }
+            }
+        };
+        handler.postDelayed(r, 100000);
+    }
+
+
+    // Disconnecting from Myo
+    private void disconnectMyo() {
+        if (myo != null) {
+            //Applying settings to disconnected Myo
+            myo.setConnectionSpeed(BaseMyo.ConnectionSpeed.BALANCED);
+            myo.writeSleepMode(MyoCmds.SleepMode.NORMAL, new Myo.MyoCommandCallback() {
+                @Override
+                public void onCommandDone(Myo myo, MyoMsg msg) {
+                    Log.d(MYO_TAG, "Sleep mode: -");
+                }
+            });
+            myo.writeMode(MyoCmds.EmgMode.NONE, MyoCmds.ImuMode.NONE, MyoCmds.ClassifierMode.DISABLED, new Myo.MyoCommandCallback() {
+                @Override
+                public void onCommandDone(Myo myo, MyoMsg msg) {
+                    Log.d(MYO_TAG, "EMG and Imu: -");
+
+                    // Disconnecting from Myo and aplying UI changes
+                    Log.d(MYO_TAG, "Disconnected");
+                    myo.disconnect();
+                    connected = false;
+
+                    nBuilder.setContentText(getString(R.string.notification_state_disconnected))
+                            .setStyle(new NotificationCompat.BigTextStyle().bigText(getString(R.string.notification_state_disconnected)))
+                            .setProgress(0,0,false)
+                            .mActions.clear();
+                    nBuilder.addAction(0, getString(R.string.notification_action_connect),connectIntent).addAction(connectMac);
+                    startForeground(NOTIFICATION_ID, nBuilder.getNotification());
+                    nBuilder.setStyle(null);
+
+//                    removeValues();
+
+                }
+            });
+        }
+    }
+
+
+    // Removing values when Myo is detached
+    private void removeValues() {
+        if (myo != null) {
+            if (emgProcessor != null) {
+                myo.removeProcessor(emgProcessor);
+                emgProcessor = null;
+            }
+            if (imuProcessor != null) {
+                myo.removeProcessor(imuProcessor);
+                imuProcessor = null;
+            }
+            myo.removeConnectionListener(this);
+            myo = null;
+        }
+    }
+
 
     @Override
     public void onDestroy() {
@@ -214,14 +364,14 @@ public class Plugin extends Aware_Plugin implements
         );
 
         //Removing values
-        myoConnectReceiver = null;
-        removeValues();
+        //removeValues();
 
         Aware.setSetting(this, Settings.STATUS_PLUGIN_TEMPLATE, false);
 
         //Stop AWARE instance in plugin
         Aware.stopAWARE(this);
     }
+
 
     //Myo connection state listener
     @Override
@@ -230,7 +380,38 @@ public class Plugin extends Aware_Plugin implements
         if (state == BaseMyo.ConnectionState.CONNECTED) {
             Log.d(MYO_TAG, "STATE CONNECTED");
 
-            //Applying settings to connected Myo
+            // Applying settings to connected Myo
+            // First run does not work
+            Myo.MyoCommandCallback callbackSleep = new Myo.MyoCommandCallback() {
+                @Override
+                public void onCommandDone(Myo myo, MyoMsg msg) {
+                    Log.d(MYO_TAG, "Test Sleep applied");
+                }
+            };
+
+            Myo.MyoCommandCallback callbackUnlock = new Myo.MyoCommandCallback() {
+                @Override
+                public void onCommandDone(Myo myo, MyoMsg msg) {
+                    Log.d(MYO_TAG, "Test Unlock applied");
+                }
+            };
+
+            Myo.MyoCommandCallback callbackWrite = new Myo.MyoCommandCallback() {
+                @Override
+                public void onCommandDone(Myo myo, MyoMsg msg) {
+                    Log.d(MYO_TAG, "Test WriteMode applied");
+                }
+            };
+            myo.setConnectionSpeed(BaseMyo.ConnectionSpeed.HIGH);
+            myo.setConnectionSpeed(BaseMyo.ConnectionSpeed.HIGH);
+            myo.writeSleepMode(MyoCmds.SleepMode.NEVER,callbackSleep);
+            myo.writeSleepMode(MyoCmds.SleepMode.NEVER,callbackSleep);
+            myo.writeUnlock(MyoCmds.UnlockType.HOLD, callbackUnlock);
+            myo.writeUnlock(MyoCmds.UnlockType.HOLD, callbackUnlock);
+            myo.writeMode(MyoCmds.EmgMode.FILTERED, MyoCmds.ImuMode.RAW, MyoCmds.ClassifierMode.DISABLED,callbackWrite);
+            myo.writeMode(MyoCmds.EmgMode.FILTERED, MyoCmds.ImuMode.RAW, MyoCmds.ClassifierMode.DISABLED,callbackWrite);
+
+            // Second run makes actual changes
             myo.setConnectionSpeed(BaseMyo.ConnectionSpeed.HIGH);
             myo.writeSleepMode(MyoCmds.SleepMode.NEVER, new Myo.MyoCommandCallback() {
                 @Override
@@ -247,7 +428,7 @@ public class Plugin extends Aware_Plugin implements
             });
             myo.writeMode(MyoCmds.EmgMode.FILTERED, MyoCmds.ImuMode.RAW, MyoCmds.ClassifierMode.DISABLED, new Myo.MyoCommandCallback() {
                 @Override
-                public void onCommandDone(Myo myo, MyoMsg msg) {
+                public void onCommandDone(Myo mMyo, MyoMsg msg) {
                     // Setting up Imu and EMG sensors
                     Log.d(MYO_TAG, "EMG and Imu: +");
                     imuProcessor = new ImuProcessor();
@@ -258,21 +439,37 @@ public class Plugin extends Aware_Plugin implements
                     myo.addProcessor(emgProcessor);
 
                     // Applying UI updates
-                    Log.d(Plugin.MYO_TAG, "Connected to: " + baseMyo.toString());
-                    startForeground(1, showNotification("Myo is connected"));
-                    if (awareSensor != null) awareSensor.onMyoConnected(baseMyo.getDeviceAddress());
+                    Log.d(MYO_TAG, "Connected to: " + myo.toString());
+
+                    nBuilder.setContentText(getString(R.string.notification_state_connected))
+                            .setProgress(0,0,false)
+                            .mActions.clear();
+                    nBuilder.addAction(0, getString(R.string.notification_action_disconnect), disconnectIntent);
+                    startForeground(NOTIFICATION_ID, nBuilder.getNotification());
+                    connected = true;
+//                    uiConnected(true);
                 }
             });
+
         }
 
         if (state == BaseMyo.ConnectionState.DISCONNECTED) {
             Log.d(MYO_TAG, "STATE DISCONNECTED");
-            Log.d(Plugin.MYO_TAG, "Disconnected from Myo: " + baseMyo.toString());
-            startForeground(1, showNotification("Myo is disconnected"));
-            if (awareSensor != null) awareSensor.onMyoDisconnected();
+            Log.d(MYO_TAG, "Disconnected from Myo: " + baseMyo.toString());
+            connected = false;
 
-            removeValues();
+            nBuilder.setContentText(getString(R.string.notification_state_disconnected))
+                    .setStyle(new NotificationCompat.BigTextStyle().bigText(getString(R.string.notification_state_disconnected)))
+                    .setProgress(0,0,false)
+                    .mActions.clear();
+            nBuilder.addAction(0, getString(R.string.notification_action_connect), connectIntent).addAction(connectMac);
+            startForeground(NOTIFICATION_ID, nBuilder.getNotification());
+            nBuilder.setStyle(null);
+
+//            uiConnected(false);
+            //removeValues();
         }
+
     }
 
     //Myo battery level listener
@@ -281,7 +478,8 @@ public class Plugin extends Aware_Plugin implements
     public void onBatteryLevelRead(Myo myo, MyoMsg msg, int batteryLevel) {
         if (batteryLvl != batteryLevel) {
             batteryLvl = batteryLevel;
-            if (awareSensor != null) awareSensor.onMyoBatteryChanged(String.valueOf(batteryLvl));
+            Log.d(MYO_TAG, "LISTENER: BATTERY: " + batteryLevel);
+//            if (awareSensor != null) awareSensor.onMyoBatteryChanged(String.valueOf(batteryLvl));
         }
     }
 
@@ -296,12 +494,13 @@ public class Plugin extends Aware_Plugin implements
             gyroData.put("gyroX", imuData.getGyroData()[0]);
             gyroData.put("gyroY", imuData.getGyroData()[1]);
             gyroData.put("gyroZ", imuData.getGyroData()[2]);
-            if (awareSensor != null) awareSensor.onMyoGyroChanged(gyroData);
+            Log.d(MYO_TAG, "LISTENER: IMU: " + gyroData.toString());
+//            if (awareSensor != null) awareSensor.onMyoGyroChanged(gyroData);
             mLastImuUpdate = System.currentTimeMillis();
         }
 
         // Check for battery level every 2 minutes
-        if (System.currentTimeMillis() - mLastBatteryUpdate > 60000) {
+        if (System.currentTimeMillis() - mLastBatteryUpdate > 120000) {
             myo.readBatteryLevel(Plugin.this);
             mLastBatteryUpdate = System.currentTimeMillis();
         }
@@ -323,88 +522,80 @@ public class Plugin extends Aware_Plugin implements
             emg.put("emg5", String.valueOf(data[5]));
             emg.put("emg6", String.valueOf(data[6]));
             emg.put("emg7", String.valueOf(data[7]));
-            if (awareSensor != null) awareSensor.onMyoEmgChanged(emg);
+            Log.d(MYO_TAG, "LISTENER: IMU: " + emg.toString());
+//            if (awareSensor != null) awareSensor.onMyoEmgChanged(emg);
             mLastEmgUpdate = System.currentTimeMillis();
         }
     }
 
-    // Initializing Connector and connecting to Myo
-    private void connectMyo() {
-        if (connector == null) connector = new MyoConnector(this);
-        connector.scan(5000, new MyoConnector.ScannerCallback() {
-            @Override
-            public void onScanFinished(List<Myo> scannedMyos) {
+//    // Initializing Connector and connecting to Myo
+//    private void connectMyo() {
+//        if (connector == null) connector = new MyoConnector(this);
+//        connector.scan(5000, new MyoConnector.ScannerCallback() {
+//            @Override
+//            public void onScanFinished(List<Myo> scannedMyos) {
+//
+//                Log.d(MYO_TAG, "Found " + scannedMyos.size() + " Myo: " + scannedMyos.toString());
+//
+//                if (scannedMyos.size() == 0) {
+//                    Log.d(Plugin.MYO_TAG, "Connection failed, cannot find adjacent Myo");
+//                    startForeground(NOTIFICATION_ID, showNotification("Myo is disconnected"));
+//                    if (awareSensor != null) awareSensor.onMyoConnectionFailed();
+//
+//                } else {
+//                    myo = scannedMyos.get(0);
+//                    myo.addConnectionListener(Plugin.this);
+//                    myo.connect();
+//                }
+//            }
+//        });
+//    }
 
-                Log.d(MYO_TAG, "Found " + scannedMyos.size() + " Myo: " + scannedMyos.toString());
+//    // Disconnecting from Myo
+//    private void disconnectMyo() {
+//        if (myo != null) {
+//            //Applying settings to disconnected Myo
+//            myo.setConnectionSpeed(BaseMyo.ConnectionSpeed.BALANCED);
+//            myo.writeSleepMode(MyoCmds.SleepMode.NORMAL, new Myo.MyoCommandCallback() {
+//                @Override
+//                public void onCommandDone(Myo myo, MyoMsg msg) {
+//                    Log.d(MYO_TAG, "Sleep mode: -");
+//                }
+//            });
+//            myo.writeMode(MyoCmds.EmgMode.NONE, MyoCmds.ImuMode.NONE, MyoCmds.ClassifierMode.DISABLED, new Myo.MyoCommandCallback() {
+//                @Override
+//                public void onCommandDone(Myo myo, MyoMsg msg) {
+//                    Log.d(MYO_TAG, "EMG and Imu: -");
+//
+//                    // Disconnecting from Myo and aplying UI changes
+//                    Log.d(MYO_TAG, "Disconnected");
+//                    myo.disconnect();
+//                    startForeground(NOTIFICATION_ID, showNotification("Myo is disconnected"));
+//                    removeValues();
+//                    if (awareSensor != null) awareSensor.onMyoDisconnected();
+//                }
+//            });
+//        }
+//    }
 
-                if (scannedMyos.size() == 0) {
-                    Log.d(Plugin.MYO_TAG, "Connection failed, cannot find adjacent Myo");
-                    startForeground(1, showNotification("Myo is disconnected"));
-                    if (awareSensor != null) awareSensor.onMyoConnectionFailed();
+//    // Removing values when Myo is detached
+//    private void removeValues() {
+//        if (myo != null) {
+//            if (emgProcessor != null) {
+//                myo.removeProcessor(emgProcessor);
+//                emgProcessor = null;
+//            }
+//            if (imuProcessor != null) {
+//                myo.removeProcessor(imuProcessor);
+//                imuProcessor = null;
+//            }
+//            myo.removeConnectionListener(this);
+//            myo = null;
+//        }
+//
+//        if (connector != null) {
+//            connector = null;
+//        }
+//    }
 
-                } else {
-                    myo = scannedMyos.get(0);
-                    myo.addConnectionListener(Plugin.this);
-                    myo.connect();
-                }
-            }
-        });
-    }
-
-    // Disconnecting from Myo
-    private void disconnectMyo() {
-        if (myo != null) {
-            //Applying settings to disconnected Myo
-            myo.setConnectionSpeed(BaseMyo.ConnectionSpeed.BALANCED);
-            myo.writeSleepMode(MyoCmds.SleepMode.NORMAL, new Myo.MyoCommandCallback() {
-                @Override
-                public void onCommandDone(Myo myo, MyoMsg msg) {
-                    Log.d(MYO_TAG, "Sleep mode: -");
-                }
-            });
-            myo.writeMode(MyoCmds.EmgMode.NONE, MyoCmds.ImuMode.NONE, MyoCmds.ClassifierMode.DISABLED, new Myo.MyoCommandCallback() {
-                @Override
-                public void onCommandDone(Myo myo, MyoMsg msg) {
-                    Log.d(MYO_TAG, "EMG and Imu: -");
-
-                    // Disconnecting from Myo and aplying UI changes
-                    Log.d(MYO_TAG, "Disconnected");
-                    myo.disconnect();
-                    startForeground(1, showNotification("Myo is disconnected"));
-                    removeValues();
-                    if (awareSensor != null) awareSensor.onMyoDisconnected();
-                }
-            });
-        }
-    }
-
-    // Removing values when Myo is detached
-    private void removeValues() {
-        if (myo != null) {
-            if (emgProcessor != null) {
-                myo.removeProcessor(emgProcessor);
-                emgProcessor = null;
-            }
-            if (imuProcessor != null) {
-                myo.removeProcessor(imuProcessor);
-                imuProcessor = null;
-            }
-            myo.removeConnectionListener(this);
-            myo = null;
-        }
-
-        if (connector != null) {
-            connector = null;
-        }
-    }
-
-    // Notification set up
-    private Notification showNotification(String notifyText) {
-        return new Notification.Builder(getApplicationContext())
-                .setSmallIcon(R.drawable.ic_myo)
-                .setOngoing(true)
-                .setContentTitle("AWARE: Myo armband")
-                .setContentText(notifyText)
-                .getNotification();
-    }
 }

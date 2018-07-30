@@ -9,12 +9,7 @@ import android.support.annotation.Nullable;
 import com.aware.plugin.myo.Provider;
 import com.aware.syncadapters.AwareSyncAdapter;
 
-/**
- * Created by denzilferreira on 01/09/2017.
- *
- * This class tells what data is synched to the server. The Uri[] needs to be in the same order as the database tables and tables fields (due to the index in the array).
- */
-public class Template_Sync extends Service {
+public class Myo_Sync extends Service {
     private AwareSyncAdapter sSyncAdapter = null;
     private static final Object sSyncAdapterLock = new Object();
 
@@ -27,7 +22,7 @@ public class Template_Sync extends Service {
                 sSyncAdapter.init(
                         Provider.DATABASE_TABLES, Provider.TABLES_FIELDS,
                         new Uri[]{
-                                Provider.TableOne_Data.CONTENT_URI
+                                //Provider.Myo_Data.CONTENT_URI, Provider.Game_Data.CONTENT_URI
                         }
                 );
             }

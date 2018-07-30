@@ -1,4 +1,17 @@
 <resources>
     <string name="app_name">AWARE: Myo Plugin</string>
     <string name="plugin_template">Plugin: Myo</string>
+
+    <string name="type_mac">Type your Myo MAC address here</string>
+
+    <string name="notification_title">AWARE: Myo armband</string>
+    <string name="notification_state_disconnected">Disconnected.\nSelect options below to connect</string>
+    <string name="notification_state_connecting">Connecting…</string>
+    <string name="notification_state_connected">Connected. Data collection is active</string>
+    <string name="notification_state_scanning_myos">Scanning for adjacent Myos…</string>
+    <string name="notification_state_no_myos_found">No adjacent Myos were found.\nTry to scan again or connect to Myo with its MAC address</string>
+    <string name="notification_action_connect">Autoconnect</string>
+    <string name="notification_action_connect_mac">Connect via MAC</string>
+    <string name="notification_action_disconnect">Disconnect</string>
+
 </resources>
