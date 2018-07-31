@@ -13,6 +13,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.support.v4.app.NotificationCompat;
 import android.support.v4.app.RemoteInput;
@@ -21,8 +22,16 @@ import android.util.Log;
 
 import com.aware.Aware;
 import com.aware.Aware_Preferences;
+import com.aware.ui.PermissionsHandler;
 import com.aware.utils.Aware_Plugin;
 
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.TimerTask;
@@ -40,8 +49,9 @@ import eu.darken.myolib.processor.imu.ImuProcessor;
 public class Plugin extends Aware_Plugin implements
         BaseMyo.ConnectionListener,
         EmgProcessor.EmgDataListener,
+        ImuProcessor.ImuDataListener,
         Myo.BatteryCallback,
-        ImuProcessor.ImuDataListener {
+        Myo.ReadDeviceNameCallback{
 
 
     // Notification component variables
@@ -64,14 +74,43 @@ public class Plugin extends Aware_Plugin implements
     private BluetoothAdapter bluetoothAdapter;
     private BluetoothDevice bt;
 
+    // JSON objects variables
+    private JSONObject myoDataObject, batteryObj;
+    private JSONArray accArray, gyroArray, orientArray, emgArray, batteryArray;
+
+    private static final int NOTIFICATION_ID = 1;
+
     private static final String MYO_TAG = "MYO_TAG";
     private static final String MYO_MAC_ADDRESS = "MYO_MAC_ADDRESS";
 
+    // Broadcast receiver flags
     private static final String INTENT_CONNECT = "CONNECT";
     private static final String INTENT_CONNECT_MAC = "CONNECT_MAC";
     private static final String INTENT_DISCONNECT = "DISCONNECT";
 
-    private static final int NOTIFICATION_ID = 1;
+    // Sampling keys for JSON handling
+    private static final String SAMPLE_KEY_TIMESTAMP = "timestamp";
+    private static final String SAMPLE_KEY_IMU_X = "x";
+    private static final String SAMPLE_KEY_IMU_Y = "y";
+    private static final String SAMPLE_KEY_IMU_Z = "z";
+    private static final String SAMPLE_KEY_EMG_0 = "emg0";
+    private static final String SAMPLE_KEY_EMG_1 = "emg1";
+    private static final String SAMPLE_KEY_EMG_2 = "emg2";
+    private static final String SAMPLE_KEY_EMG_3 = "emg3";
+    private static final String SAMPLE_KEY_EMG_4 = "emg4";
+    private static final String SAMPLE_KEY_EMG_5 = "emg5";
+    private static final String SAMPLE_KEY_EMG_6 = "emg6";
+    private static final String SAMPLE_KEY_EMG_7 = "emg7";
+    private static final String SAMPLE_KEY_BATTERY_LEVEL = "battery_level";
+    private static final String SAMPLE_KEY_MAC_ADDRESS = "mac";
+    private static final String SAMPLE_KEY_LABEL = "label";
+    private static final String SAMPLE_KEY_BATTERY = "battery";
+    private static final String SAMPLE_KEY_IMU = "IMU";
+    private static final String SAMPLE_KEY_EMG = "EMG";
+    private static final String SAMPLE_KEY_MYO_DATA = "myo_data";
+    private static final String SAMPLE_KEY_ACCELEROMETER = "accelerometer";
+    private static final String SAMPLE_KEY_GYROSCOPE = "gyroscope";
+    private static final String SAMPLE_KEY_ORIENTATION = "orientation";
 
 
     @Override
@@ -101,6 +140,7 @@ public class Plugin extends Aware_Plugin implements
         REQUIRED_PERMISSIONS.add(Manifest.permission.BLUETOOTH_ADMIN);
         REQUIRED_PERMISSIONS.add(Manifest.permission.ACCESS_COARSE_LOCATION);
         REQUIRED_PERMISSIONS.add(Manifest.permission.ACCESS_FINE_LOCATION);
+        REQUIRED_PERMISSIONS.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
 
         //Request to turn bluetooth on
         if (bluetoothAdapter == null) bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
@@ -137,6 +177,15 @@ public class Plugin extends Aware_Plugin implements
         nBuilder.addAction(0, getString(R.string.notification_action_connect), connectIntent).addAction(connectMac);
         startForeground(NOTIFICATION_ID, nBuilder.getNotification());
         nBuilder.setStyle(null);
+
+        // JSON variables declaration
+        myoDataObject = new JSONObject();
+        accArray = new JSONArray();
+        gyroArray = new JSONArray();
+        orientArray = new JSONArray();
+        emgArray = new JSONArray();
+        batteryArray = new JSONArray();
+        batteryObj = new JSONObject();
     }
 
     //This function gets called every 5 minutes by AWARE to make sure this plugin is still running.
@@ -204,6 +253,13 @@ public class Plugin extends Aware_Plugin implements
 
             //Initialise AWARE instance in plugin
             Aware.startAWARE(this);
+        } else {
+
+            // Request permissions if not granted yet
+            Intent permissions = new Intent(this, PermissionsHandler.class);
+            permissions.putExtra(PermissionsHandler.EXTRA_REQUIRED_PERMISSIONS, REQUIRED_PERMISSIONS);
+            permissions.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(permissions);
         }
 
         return START_STICKY;
@@ -301,6 +357,7 @@ public class Plugin extends Aware_Plugin implements
     // Disconnecting from Myo
     private void disconnectMyo() {
         if (myo != null) {
+
             //Applying settings to disconnected Myo
             myo.setConnectionSpeed(BaseMyo.ConnectionSpeed.BALANCED);
             myo.writeSleepMode(MyoCmds.SleepMode.NORMAL, new Myo.MyoCommandCallback() {
@@ -327,8 +384,52 @@ public class Plugin extends Aware_Plugin implements
                     startForeground(NOTIFICATION_ID, nBuilder.getNotification());
                     nBuilder.setStyle(null);
 
-//                    removeValues();
 
+                    try {
+                        myoDataObject.put(SAMPLE_KEY_BATTERY, batteryArray);
+
+                        JSONObject imuObject = new JSONObject();
+                        imuObject.put(SAMPLE_KEY_ACCELEROMETER, accArray);
+                        imuObject.put(SAMPLE_KEY_GYROSCOPE, gyroArray);
+                        imuObject.put(SAMPLE_KEY_ORIENTATION, orientArray);
+
+                        JSONObject result = new JSONObject();
+                        result.put(SAMPLE_KEY_MYO_DATA, myoDataObject);
+                        result.put(SAMPLE_KEY_IMU, imuObject);
+                        result.put(SAMPLE_KEY_EMG, emgArray);
+
+                        // Recording result to local .txt file
+                        // for testing only
+                        File root = new File(Environment.getExternalStorageDirectory().toString());
+                        Long tsLong = System.currentTimeMillis()/1000;
+                        String ts = tsLong.toString();
+                        File gpxfile = new File(root, "samples" + ts +".txt");
+                        FileWriter writer = null;
+                        try {
+                            writer = new FileWriter(gpxfile);
+                            writer.append(result.toString());
+                            writer.flush();
+                            writer.close();
+                            Log.d(MYO_TAG, "Logging done");
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                            Log.d(MYO_TAG, "Logging not done");
+                            Log.d(MYO_TAG, e.getMessage());
+                        }
+
+                        //TEST
+                        // Inserting data to database
+//                        ContentValues values = new ContentValues();
+//                        values.put(Provider.Myo_Data.TIMESTAMP, System.currentTimeMillis());
+//                        values.put(Provider.Myo_Data.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+//                        values.put(Provider.Myo_Data.MYO_DATA, result.toString());
+//                        getApplicationContext().getContentResolver().insert(Provider.Myo_Data.CONTENT_URI, values);
+
+                    } catch (JSONException e) {
+                        e.printStackTrace();
+                    }
+
+//                    removeValues();
                 }
             });
         }
@@ -438,9 +539,6 @@ public class Plugin extends Aware_Plugin implements
                     myo.addProcessor(imuProcessor);
                     myo.addProcessor(emgProcessor);
 
-                    // Applying UI updates
-                    Log.d(MYO_TAG, "Connected to: " + myo.toString());
-
                     nBuilder.setContentText(getString(R.string.notification_state_connected))
                             .setProgress(0,0,false)
                             .mActions.clear();
@@ -448,6 +546,14 @@ public class Plugin extends Aware_Plugin implements
                     startForeground(NOTIFICATION_ID, nBuilder.getNotification());
                     connected = true;
 //                    uiConnected(true);
+
+                    myo.readDeviceName(Plugin.this);
+                    try {
+                        myoDataObject.put(SAMPLE_KEY_MAC_ADDRESS, myo.getDeviceAddress());;
+
+                    } catch (JSONException e) {
+                        e.printStackTrace();
+                    }
                 }
             });
 
@@ -472,37 +578,82 @@ public class Plugin extends Aware_Plugin implements
 
     }
 
-    //Myo battery level listener
-    private int batteryLvl = -100;
+
+    //Myo device name reader
     @Override
-    public void onBatteryLevelRead(Myo myo, MyoMsg msg, int batteryLevel) {
-        if (batteryLvl != batteryLevel) {
-            batteryLvl = batteryLevel;
-            Log.d(MYO_TAG, "LISTENER: BATTERY: " + batteryLevel);
-//            if (awareSensor != null) awareSensor.onMyoBatteryChanged(String.valueOf(batteryLvl));
+    public void onDeviceNameRead(Myo myo, MyoMsg msg, String deviceName) {
+        try {
+            myoDataObject.put(SAMPLE_KEY_LABEL, deviceName);
+        } catch (JSONException e) {
+            e.printStackTrace();
         }
     }
 
-    //Myo Imu data (accelerometer, gyroscope, orientation) listener
+    //Myo battery level listener
+    @Override
+    public void onBatteryLevelRead(Myo myo, MyoMsg msg, int batteryLevel) {
+        try {
+            // Record battery level to JSON object
+            batteryObj.put(SAMPLE_KEY_BATTERY_LEVEL, batteryLevel);
+            batteryArray.put(batteryObj);
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+
+        Log.d(MYO_TAG, "LISTENER: BATTERY: " + batteryLevel);
+    }
+
+
+    //Myo IMU data (accelerometer, gyroscope, orientation) listener
     private long mLastImuUpdate = 0;
     private long mLastBatteryUpdate = 0;
     @Override
     public void onNewImuData(ImuData imuData) {
-        // Check for Gyro updates twice per second
+        // Check for sensor updates twice per second
         if (System.currentTimeMillis() - mLastImuUpdate > 500) {
-            ContentValues gyroData = new ContentValues();
-            gyroData.put("gyroX", imuData.getGyroData()[0]);
-            gyroData.put("gyroY", imuData.getGyroData()[1]);
-            gyroData.put("gyroZ", imuData.getGyroData()[2]);
-            Log.d(MYO_TAG, "LISTENER: IMU: " + gyroData.toString());
-//            if (awareSensor != null) awareSensor.onMyoGyroChanged(gyroData);
             mLastImuUpdate = System.currentTimeMillis();
+
+            try {
+                JSONObject accObj = new JSONObject();
+                accObj.put(SAMPLE_KEY_TIMESTAMP, imuData.getTimeStamp())
+                        .put(SAMPLE_KEY_IMU_X, imuData.getAccelerometerData()[0])
+                        .put(SAMPLE_KEY_IMU_Y, imuData.getAccelerometerData()[1])
+                        .put(SAMPLE_KEY_IMU_Z, imuData.getAccelerometerData()[2]);
+                accArray.put(accObj);
+                accObj = null;
+
+                JSONObject gyroObj = new JSONObject();
+                gyroObj.put(SAMPLE_KEY_TIMESTAMP, imuData.getTimeStamp())
+                        .put(SAMPLE_KEY_IMU_X, imuData.getGyroData()[0])
+                        .put(SAMPLE_KEY_IMU_Y, imuData.getGyroData()[1])
+                        .put(SAMPLE_KEY_IMU_Z, imuData.getGyroData()[2]);
+                gyroArray.put(gyroObj);
+                gyroObj = null;
+
+                JSONObject orientObj = new JSONObject();
+                orientObj.put(SAMPLE_KEY_TIMESTAMP, imuData.getTimeStamp())
+                        .put(SAMPLE_KEY_IMU_X, imuData.getOrientationData()[0])
+                        .put(SAMPLE_KEY_IMU_Y, imuData.getOrientationData()[1])
+                        .put(SAMPLE_KEY_IMU_Z, imuData.getOrientationData()[2]);
+                orientArray.put(orientObj);
+                orientObj = null;
+
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
         }
 
         // Check for battery level every 2 minutes
         if (System.currentTimeMillis() - mLastBatteryUpdate > 120000) {
-            myo.readBatteryLevel(Plugin.this);
             mLastBatteryUpdate = System.currentTimeMillis();
+            myo.readBatteryLevel(Plugin.this);
+
+            try {
+                // Record battery sampling timestamp to JSON object
+                batteryObj.put(SAMPLE_KEY_TIMESTAMP, imuData.getTimeStamp());
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
         }
     }
 
@@ -512,21 +663,30 @@ public class Plugin extends Aware_Plugin implements
     public void onNewEmgData(EmgData emgData) {
         // Check for Emg updates twice per second
         if (System.currentTimeMillis() - mLastEmgUpdate > 500) {
-            byte[] data = emgData.getData();
-            ContentValues emg = new ContentValues();
-            emg.put("emg0", String.valueOf(data[0]));
-            emg.put("emg1", String.valueOf(data[1]));
-            emg.put("emg2", String.valueOf(data[2]));
-            emg.put("emg3", String.valueOf(data[3]));
-            emg.put("emg4", String.valueOf(data[4]));
-            emg.put("emg5", String.valueOf(data[5]));
-            emg.put("emg6", String.valueOf(data[6]));
-            emg.put("emg7", String.valueOf(data[7]));
-            Log.d(MYO_TAG, "LISTENER: IMU: " + emg.toString());
-//            if (awareSensor != null) awareSensor.onMyoEmgChanged(emg);
             mLastEmgUpdate = System.currentTimeMillis();
+
+            try {
+                JSONObject emgObj = new JSONObject();
+                emgObj.put(SAMPLE_KEY_TIMESTAMP, emgData.getTimestamp());
+                emgObj.put(SAMPLE_KEY_EMG_0, emgData.getData()[0]);
+                emgObj.put(SAMPLE_KEY_EMG_1, emgData.getData()[1]);
+                emgObj.put(SAMPLE_KEY_EMG_2, emgData.getData()[2]);
+                emgObj.put(SAMPLE_KEY_EMG_3, emgData.getData()[3]);
+                emgObj.put(SAMPLE_KEY_EMG_4, emgData.getData()[4]);
+                emgObj.put(SAMPLE_KEY_EMG_5, emgData.getData()[5]);
+                emgObj.put(SAMPLE_KEY_EMG_6, emgData.getData()[6]);
+                emgObj.put(SAMPLE_KEY_EMG_7, emgData.getData()[7]);
+
+                emgArray.put(emgObj);
+                emgObj = null;
+
+            } catch (JSONException e) {
+                e.printStackTrace();;
+            }
         }
     }
+
+
 
 //    // Initializing Connector and connecting to Myo
 //    private void connectMyo() {

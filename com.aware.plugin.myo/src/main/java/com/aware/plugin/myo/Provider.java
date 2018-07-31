@@ -22,21 +22,34 @@ import java.util.HashMap;
 
 public class Provider extends ContentProvider {
 
-    public static String AUTHORITY = "com.aware.plugin.myo.provider.xxx"; //change to package.provider.your_plugin_name
+    /**
+     * Authority of this content provider
+     */
+    public static String AUTHORITY = "com.aware.plugin.myo.provider.myo";
 
-    public static final int DATABASE_VERSION = 1; //increase this if you make changes to the database structure, i.e., rename columns, etc.
-    public static final String DATABASE_NAME = "plugin_template.db"; //the database filename, use plugin_xxx for plugins.
+    /**
+     * ContentProvider database version. Increment every time you modify the database structure
+     */
+    public static final int DATABASE_VERSION = 1;
 
-    //Add here your database table names, as many as you need
-    public static final String DB_TBL_TEMPLATE = "table_one";
+    /**
+     * Database stored in external folder: /AWARE/myo.db
+     */
+    public static final String DATABASE_NAME = "plugin_myo.db";
 
-    //For each table, add two indexes: DIR and ITEM. The index needs to always increment. Next one is 3, and so on.
-    private static final int TABLE_ONE_DIR = 1;
-    private static final int TABLE_ONE_ITEM = 2;
+    //Database table names
+    public static final String DB_TBL_MYO = "plugin_myo";
 
-    //Put tables names in this array so AWARE knows what you have on the database
+    //ContentProvider query indexes
+    private static final int TABLE_MYO_DIR = 1;
+    private static final int TABLE_MYO_ITEM = 2;
+
+    /**
+     * Database tables:
+     * - plugin_myo
+     */
     public static final String[] DATABASE_TABLES = {
-        DB_TBL_TEMPLATE
+        DB_TBL_MYO
     };
 
     //These are columns that we need to sync data, don't change this!
@@ -47,28 +60,23 @@ public class Provider extends ContentProvider {
     }
 
     /**
-     * Create one of these per database table
-     * In this example, we are adding example columns
+     * Myo plugin table
      */
-    public static final class TableOne_Data implements AWAREColumns {
-        public static final Uri CONTENT_URI = Uri.parse("content://" + AUTHORITY + "/" + DB_TBL_TEMPLATE);
-        public static final String CONTENT_TYPE = ContentResolver.CURSOR_DIR_BASE_TYPE + "/vnd.com.aware.plugin.myo.provider.table_one"; //modify me
-        public static final String CONTENT_ITEM_TYPE = ContentResolver.CURSOR_ITEM_BASE_TYPE + "/vnd.com.aware.plugin.myo.provider.table_one"; //modify me
+    public static final class Myo_Data implements AWAREColumns {
+        public static final Uri CONTENT_URI = Uri.parse("content://" + AUTHORITY + "/" + DB_TBL_MYO);
+        public static final String CONTENT_TYPE = ContentResolver.CURSOR_DIR_BASE_TYPE + "/vnd.com.aware.plugin.myo.provider.plugin_myo";
+        public static final String CONTENT_ITEM_TYPE = ContentResolver.CURSOR_ITEM_BASE_TYPE + "/vnd.com.aware.plugin.myo.provider.plugin_myo";
 
         //Note: integers and strings don't need a type prefix_
-        public static final String NAME = "name";
-        public static final String BIG_NUMBER = "double_big_number"; //a double_ prefix makes a MySQL DOUBLE column
-        public static final String PICTURE = "blob_picture"; //a blob_ prefix makes a MySQL BLOB column
+        public static final String MYO_DATA = "myo_data";
     }
 
     //Define each database table fields
     private static final String DB_TBL_TEMPLATE_FIELDS =
-        TableOne_Data._ID + " integer primary key autoincrement," +
-        TableOne_Data.TIMESTAMP + " real default 0," +
-        TableOne_Data.DEVICE_ID + " text default ''," +
-        TableOne_Data.NAME + " text default ''," +
-        TableOne_Data.BIG_NUMBER + " real default 0," +
-        TableOne_Data.PICTURE + " blob default null";
+        Myo_Data._ID + " integer primary key autoincrement," +
+        Myo_Data.TIMESTAMP + " real default 0," +
+        Myo_Data.DEVICE_ID + " text default ''," +
+        Myo_Data.MYO_DATA + " text default ''";
 
     /**
      * Share the fields with AWARE so we can replicate the table schema on the server
@@ -90,14 +98,14 @@ public class Provider extends ContentProvider {
     //--
 
     //For each table, create a hashmap needed for database queries
-    private HashMap<String, String> tableOneHash;
+    private HashMap<String, String> tableMyoHash;
 
     /**
      * Returns the provider authority that is dynamic
      * @return
      */
     public static String getAuthority(Context context) {
-        AUTHORITY = context.getPackageName() + ".provider.xxx";
+        AUTHORITY = context.getPackageName() + ".provider.myo";
         return AUTHORITY;
     }
 
@@ -109,17 +117,15 @@ public class Provider extends ContentProvider {
         sUriMatcher = new UriMatcher(UriMatcher.NO_MATCH);
 
         //For each table, add indexes DIR and ITEM
-        sUriMatcher.addURI(AUTHORITY, DATABASE_TABLES[0], TABLE_ONE_DIR);
-        sUriMatcher.addURI(AUTHORITY, DATABASE_TABLES[0] + "/#", TABLE_ONE_ITEM);
+        sUriMatcher.addURI(AUTHORITY, DATABASE_TABLES[0], TABLE_MYO_DIR);
+        sUriMatcher.addURI(AUTHORITY, DATABASE_TABLES[0] + "/#", TABLE_MYO_ITEM);
 
         //Create each table hashmap so Android knows how to insert data to the database. Put ALL table fields.
-        tableOneHash = new HashMap<>();
-        tableOneHash.put(TableOne_Data._ID, TableOne_Data._ID);
-        tableOneHash.put(TableOne_Data.TIMESTAMP, TableOne_Data.TIMESTAMP);
-        tableOneHash.put(TableOne_Data.DEVICE_ID, TableOne_Data.DEVICE_ID);
-        tableOneHash.put(TableOne_Data.NAME, TableOne_Data.NAME);
-        tableOneHash.put(TableOne_Data.BIG_NUMBER, TableOne_Data.BIG_NUMBER);
-        tableOneHash.put(TableOne_Data.PICTURE, TableOne_Data.PICTURE);
+        tableMyoHash = new HashMap<>();
+        tableMyoHash.put(Myo_Data._ID, Myo_Data._ID);
+        tableMyoHash.put(Myo_Data.TIMESTAMP, Myo_Data.TIMESTAMP);
+        tableMyoHash.put(Myo_Data.DEVICE_ID, Myo_Data.DEVICE_ID);
+        tableMyoHash.put(Myo_Data.MYO_DATA, Myo_Data.MYO_DATA);
 
         return true;
     }
@@ -134,7 +140,7 @@ public class Provider extends ContentProvider {
         switch (sUriMatcher.match(uri)) {
 
             //Add each table DIR case, increasing the index accordingly
-            case TABLE_ONE_DIR:
+            case TABLE_MYO_DIR:
                 count = database.delete(DATABASE_TABLES[0], selection, selectionArgs);
                 break;
 
@@ -163,12 +169,12 @@ public class Provider extends ContentProvider {
         switch (sUriMatcher.match(uri)) {
 
             //Add each table DIR case
-            case TABLE_ONE_DIR:
-                long _id = database.insert(DATABASE_TABLES[0], TableOne_Data.DEVICE_ID, values);
+            case TABLE_MYO_DIR:
+                long _id = database.insert(DATABASE_TABLES[0], Myo_Data.DEVICE_ID, values);
                 database.setTransactionSuccessful();
                 database.endTransaction();
                 if (_id > 0) {
-                    Uri dataUri = ContentUris.withAppendedId(TableOne_Data.CONTENT_URI, _id);
+                    Uri dataUri = ContentUris.withAppendedId(Myo_Data.CONTENT_URI, _id);
                     getContext().getContentResolver().notifyChange(dataUri, null);
                     return dataUri;
                 }
@@ -190,9 +196,9 @@ public class Provider extends ContentProvider {
         switch (sUriMatcher.match(uri)) {
 
             //Add all tables' DIR entries, with the right table index
-            case TABLE_ONE_DIR:
+            case TABLE_MYO_DIR:
                 qb.setTables(DATABASE_TABLES[0]);
-                qb.setProjectionMap(tableOneHash); //the hashmap of the table
+                qb.setProjectionMap(tableMyoHash); //the hashmap of the table
                 break;
 
             default:
@@ -218,10 +224,10 @@ public class Provider extends ContentProvider {
         switch (sUriMatcher.match(uri)) {
 
             //Add each table indexes DIR and ITEM
-            case TABLE_ONE_DIR:
-                return TableOne_Data.CONTENT_TYPE;
-            case TABLE_ONE_ITEM:
-                return TableOne_Data.CONTENT_ITEM_TYPE;
+            case TABLE_MYO_DIR:
+                return Myo_Data.CONTENT_TYPE;
+            case TABLE_MYO_ITEM:
+                return Myo_Data.CONTENT_ITEM_TYPE;
 
             default:
                 throw new IllegalArgumentException("Unknown URI " + uri);
@@ -239,7 +245,7 @@ public class Provider extends ContentProvider {
         switch (sUriMatcher.match(uri)) {
 
             //Add each table DIR case
-            case TABLE_ONE_DIR:
+            case TABLE_MYO_DIR:
                 count = database.update(DATABASE_TABLES[0], values, selection, selectionArgs);
                 break;
 

@@ -22,7 +22,7 @@ public class Myo_Sync extends Service {
                 sSyncAdapter.init(
                         Provider.DATABASE_TABLES, Provider.TABLES_FIELDS,
                         new Uri[]{
-                                //Provider.Myo_Data.CONTENT_URI, Provider.Game_Data.CONTENT_URI
+                                Provider.Myo_Data.CONTENT_URI
                         }
                 );
             }
