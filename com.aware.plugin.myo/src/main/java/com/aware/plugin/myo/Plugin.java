@@ -12,6 +12,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
@@ -33,6 +34,8 @@ import org.json.JSONObject;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.TimerTask;
@@ -80,11 +83,11 @@ public class Plugin extends Aware_Plugin implements
     private static final int NOTIFICATION_ID = 1;
 
     private static final String MYO_TAG = "MYO_TAG";
-    private static final String MYO_MAC_ADDRESS = "MYO_MAC_ADDRESS";
+    public static final String MYO_MAC_ADDRESS = "MYO_MAC_ADDRESS";
 
     // Broadcast receiver flags
     private static final String INTENT_CONNECT = "CONNECT";
-    private static final String INTENT_CONNECT_MAC = "CONNECT_MAC";
+    public static final String INTENT_CONNECT_MAC = "CONNECT_MAC";
     private static final String INTENT_DISCONNECT = "DISCONNECT";
 
     // Sampling keys for JSON handling
@@ -152,15 +155,23 @@ public class Plugin extends Aware_Plugin implements
         // Broadcast event intents
         connectIntent = PendingIntent.getBroadcast(getApplicationContext(), 0, new Intent(INTENT_CONNECT), PendingIntent.FLAG_CANCEL_CURRENT);
         disconnectIntent = PendingIntent.getBroadcast(getApplicationContext(), 0, new Intent(INTENT_DISCONNECT), PendingIntent.FLAG_CANCEL_CURRENT);
-        connectMacIntent = PendingIntent.getBroadcast(getApplicationContext(), 0, new Intent(INTENT_CONNECT_MAC), PendingIntent.FLAG_CANCEL_CURRENT);
 
-        // Connect via MAC action set up
-        connectMac = new NotificationCompat.Action.Builder
-                (0, getString(R.string.notification_action_connect_mac), connectMacIntent)
-                .addRemoteInput(new RemoteInput.Builder(MYO_MAC_ADDRESS)
+        // Building MAC connection feature depending on Android version
+        // Inline input for N+ versions, DialogActivity for <N
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+            connectMacIntent = PendingIntent.getBroadcast(getApplicationContext(), 0, new Intent(INTENT_CONNECT_MAC), PendingIntent.FLAG_CANCEL_CURRENT);
+            connectMac = new NotificationCompat.Action.Builder
+                    (0, getString(R.string.notification_action_connect_mac), connectMacIntent)
+                    .addRemoteInput(new RemoteInput.Builder(MYO_MAC_ADDRESS)
                         .setLabel(getString(R.string.type_mac))
                         .build())
-                .build();
+                    .build();
+        } else {
+            connectMacIntent = PendingIntent.getActivity(getApplicationContext(), 0, new Intent(getApplicationContext(), DialogActivity.class), PendingIntent.FLAG_CANCEL_CURRENT);
+            connectMac = new NotificationCompat.Action.Builder
+                    (0, getString(R.string.notification_action_connect_mac), connectMacIntent)
+                    .build();
+        }
 
         //BroadcastReceiver to listen Notification click events
         if (notifyReceiver == null) {
@@ -170,20 +181,27 @@ public class Plugin extends Aware_Plugin implements
                     Log.d(MYO_TAG, "BROADCAST RECEIVED: ");
 
                     if (!connected && intent.getAction().equals(INTENT_CONNECT)) {
-
                         Log.d(MYO_TAG, "BROADCAST: CONNECT");
+
                         connectMyo();
                     }
 
                     if (!connected && intent.getAction().equals(INTENT_CONNECT_MAC)) {
-
                         Log.d(MYO_TAG, "BROADCAST: CONNECT VIA MAC");
-                        connectMacMyo(RemoteInput.getResultsFromIntent(intent).getCharSequence(MYO_MAC_ADDRESS).toString());
+
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                            String mac = RemoteInput.getResultsFromIntent(intent).getCharSequence(MYO_MAC_ADDRESS).toString();
+                            connectMacMyo(mac);
+
+                        } else {
+                            String mac = intent.getStringExtra(Plugin.MYO_MAC_ADDRESS);
+                            connectMacMyo(mac);
+                        }
                     }
 
                     if (connected && intent.getAction().equals(INTENT_DISCONNECT)) {
-
                         Log.d(MYO_TAG, "BROADCAST: DISCONNECT");
+
                         disconnectMyo();
                     }
                 }

@@ -40,8 +40,15 @@
             <intent-filter>
                 <action android:name="android.content.SyncAdapter" />
             </intent-filter>
-            <meta-data android:name="android.content.SyncAdapter" android:resource="@xml/sync_template" />
+
+            <meta-data
+                android:name="android.content.SyncAdapter"
+                android:resource="@xml/sync_template" />
         </service>
 
+        <activity android:name=".DialogActivity"
+            android:label="Connect via MAC"
+            android:theme="@android:style/Theme.DeviceDefault.Dialog"
+            android:launchMode="singleInstance"></activity>
     </application>
 </manifest>
