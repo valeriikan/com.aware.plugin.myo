@@ -6,8 +6,11 @@
 
     <string name="notification_title">AWARE: Myo armband</string>
     <string name="notification_state_disconnected">Disconnected.\nSelect options below to connect</string>
+    <string name="notification_state_connection_error">Connection error. Please try again</string>
     <string name="notification_state_connecting">Connecting…</string>
     <string name="notification_state_connected">Connected. Data collection is active</string>
+    <string name="notification_state_connected_charge_1">Connected. Battery charge:\u0020</string>
+    <string name="notification_state_connected_charge_2">%.\nData collection is active</string>
     <string name="notification_state_scanning_myos">Scanning for adjacent Myos…</string>
     <string name="notification_state_no_myos_found">No adjacent Myos were found.\nTry to scan again or connect to Myo with its MAC address</string>
     <string name="notification_action_connect">Autoconnect</string>

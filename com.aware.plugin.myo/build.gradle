@@ -49,5 +49,5 @@ configurations.all {
 
 dependencies {
     api "com.github.denzilferreira:aware-client:$aware_libs"
-    api 'eu.darken.myolib:myolib:0.0.4'
+    api 'eu.darken.myolib:myolib:0.0.5'
 }
