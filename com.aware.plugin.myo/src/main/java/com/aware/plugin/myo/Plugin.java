@@ -7,6 +7,7 @@ import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -313,7 +314,7 @@ public class Plugin extends Aware_Plugin implements
                     final Handler handler = new Handler(Looper.getMainLooper());
                     final Runnable r = new Runnable() {
                         public void run() {
-                            if (!connected) {
+                            if (myo!=null && !connected) {
                                 nBuilder.setContentText(getString(R.string.notification_state_connection_error))
                                         .setProgress(0,0,false)
                                         .mActions.clear();
@@ -351,7 +352,7 @@ public class Plugin extends Aware_Plugin implements
         final Handler handler = new Handler();
         final Runnable r = new Runnable() {
             public void run() {
-                if (!connected) {
+                if (myo!=null && !connected) {
                     nBuilder.setContentText(getString(R.string.notification_state_connection_error))
                             .setProgress(0,0,false)
                             .mActions.clear();
@@ -406,37 +407,42 @@ public class Plugin extends Aware_Plugin implements
                         imuObject.put(SAMPLE_KEY_GYROSCOPE, gyroArray);
                         imuObject.put(SAMPLE_KEY_ORIENTATION, orientArray);
 
-                        JSONObject result = new JSONObject();
+                        final JSONObject result = new JSONObject();
                         result.put(SAMPLE_KEY_MYO_DATA, myoDataObject);
                         result.put(SAMPLE_KEY_IMU, imuObject);
                         result.put(SAMPLE_KEY_EMG, emgArray);
 
-                        // Recording result to local .txt file
-                        // for testing only
-                        File root = new File(Environment.getExternalStorageDirectory().toString());
-                        Long tsLong = System.currentTimeMillis()/1000;
-                        String ts = tsLong.toString();
-                        File gpxfile = new File(root, "samples" + ts +".txt");
-                        FileWriter writer = null;
-                        try {
-                            writer = new FileWriter(gpxfile);
-                            writer.append(result.toString());
-                            writer.flush();
-                            writer.close();
-                            Log.d(MYO_TAG, "Logging done");
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                            Log.d(MYO_TAG, "Logging not done");
-                            Log.d(MYO_TAG, e.getMessage());
-                        }
+                        // Insert data to db; Handler for getting access to AWARE from the Myo callback
+                        final Handler handler = new Handler(Looper.getMainLooper());
+                        final Runnable r = new Runnable() {
+                            public void run() {
+                                ContentValues values = new ContentValues();
+                                values.put(Provider.Myo_Data.TIMESTAMP, System.currentTimeMillis());
+                                values.put(Provider.Myo_Data.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+                                values.put(Provider.Myo_Data.MYO_DATA, result.toString());
+                                getApplicationContext().getContentResolver().insert(Provider.Myo_Data.CONTENT_URI, values);
+                            }
+                        };
+                        handler.postDelayed(r, 0);
 
-                        //TEST
-                        // Inserting data to database
-//                        ContentValues values = new ContentValues();
-//                        values.put(Provider.Myo_Data.TIMESTAMP, System.currentTimeMillis());
-//                        values.put(Provider.Myo_Data.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
-//                        values.put(Provider.Myo_Data.MYO_DATA, result.toString());
-//                        getApplicationContext().getContentResolver().insert(Provider.Myo_Data.CONTENT_URI, values);
+//                        // Recording result to local .txt file
+//                        // for testing only
+//                        File root = new File(Environment.getExternalStorageDirectory().toString());
+//                        Long tsLong = System.currentTimeMillis()/1000;
+//                        String ts = tsLong.toString();
+//                        File gpxfile = new File(root, "samples" + ts +".txt");
+//                        FileWriter writer = null;
+//                        try {
+//                            writer = new FileWriter(gpxfile);
+//                            writer.append(result.toString());
+//                            writer.flush();
+//                            writer.close();
+//                            Log.d(MYO_TAG, "Logging done");
+//                        } catch (IOException e) {
+//                            e.printStackTrace();
+//                            Log.d(MYO_TAG, "Logging not done");
+//                            Log.d(MYO_TAG, e.getMessage());
+//                        }
 
                     } catch (JSONException e) {
                         e.printStackTrace();
