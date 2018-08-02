@@ -7,24 +7,20 @@ import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
-import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.os.AsyncTask;
-import android.os.Build;
+import android.content.SyncRequest;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.support.v4.app.NotificationCompat;
 import android.support.v4.app.RemoteInput;
-import android.support.v4.content.PermissionChecker;
 import android.util.Log;
 
 import com.aware.Aware;
 import com.aware.Aware_Preferences;
-import com.aware.ui.PermissionsHandler;
 import com.aware.utils.Aware_Plugin;
 
 import org.json.JSONArray;
@@ -34,11 +30,7 @@ import org.json.JSONObject;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.TimerTask;
 
 import eu.darken.myolib.BaseMyo;
 import eu.darken.myolib.Myo;
@@ -144,14 +136,6 @@ public class Plugin extends Aware_Plugin implements
         REQUIRED_PERMISSIONS.add(Manifest.permission.ACCESS_FINE_LOCATION);
         REQUIRED_PERMISSIONS.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
 
-        //Request to turn bluetooth on
-        if (bluetoothAdapter == null) bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-        if (bluetoothAdapter != null && !bluetoothAdapter.isEnabled()) {
-            Intent enableBT = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
-            enableBT.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            startActivity(enableBT);
-        }
-
         // Broadcast event intents
         connectIntent = PendingIntent.getBroadcast(getApplicationContext(), 0, new Intent(INTENT_CONNECT), PendingIntent.FLAG_CANCEL_CURRENT);
         disconnectIntent = PendingIntent.getBroadcast(getApplicationContext(), 0, new Intent(INTENT_DISCONNECT), PendingIntent.FLAG_CANCEL_CURRENT);
@@ -244,35 +228,36 @@ public class Plugin extends Aware_Plugin implements
     public int onStartCommand(Intent intent, int flags, final int startId) {
         super.onStartCommand(intent, flags, startId);
 
-        // List of required permission
-        ArrayList<String> REQUIRED_PERMISSIONS = new ArrayList<>();
-        REQUIRED_PERMISSIONS.add(Manifest.permission.ACCESS_FINE_LOCATION);
-        REQUIRED_PERMISSIONS.add(Manifest.permission.ACCESS_COARSE_LOCATION);
+        if (PERMISSIONS_OK) {
 
-        boolean permissions_ok = true;
-        for (String p : REQUIRED_PERMISSIONS) {
-            if (PermissionChecker.checkSelfPermission(this, p) != PermissionChecker.PERMISSION_GRANTED) {
-                permissions_ok = false;
-                break;
+            //Request to turn bluetooth on
+            if (bluetoothAdapter == null) bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+            if (bluetoothAdapter != null && !bluetoothAdapter.isEnabled()) {
+                Intent enableBT = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
+                enableBT.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(enableBT);
             }
-        }
-
-        if (permissions_ok) {
 
             DEBUG = Aware.getSetting(this, Aware_Preferences.DEBUG_FLAG).equals("true");
 
             //Initialize our plugin's settings
-            Aware.setSetting(this, Settings.STATUS_PLUGIN_TEMPLATE, true);
+            Aware.setSetting(this, Settings.STATUS_PLUGIN_MYO, true);
+
+            if (Aware.isStudy(this)) {
+                ContentResolver.setIsSyncable(Aware.getAWAREAccount(this), Provider.getAuthority(this), 1);
+                ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), Provider.getAuthority(this), true);
+                long frequency = Long.parseLong(Aware.getSetting(this, Aware_Preferences.FREQUENCY_WEBSERVICE)) * 60;
+                SyncRequest request = new SyncRequest.Builder()
+                        .syncPeriodic(frequency, frequency / 3)
+                        .setSyncAdapter(Aware.getAWAREAccount(this), Provider.getAuthority(this))
+                        .setExtras(new Bundle()).build();
+                ContentResolver.requestSync(request);
+            }
+
 
             //Initialise AWARE instance in plugin
             Aware.startAWARE(this);
 
-        } else {
-            // Request permissions if not granted yet
-            Intent permissions = new Intent(this, PermissionsHandler.class);
-            permissions.putExtra(PermissionsHandler.EXTRA_REQUIRED_PERMISSIONS, REQUIRED_PERMISSIONS);
-            permissions.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            startActivity(permissions);
         }
 
         return START_STICKY;
@@ -486,7 +471,7 @@ public class Plugin extends Aware_Plugin implements
     public void onDestroy() {
         super.onDestroy();
 
-        //Turn off the sync-adapter if part of a study
+        ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), Provider.getAuthority(this), false);
         ContentResolver.removePeriodicSync(
                 Aware.getAWAREAccount(this),
                 Provider.getAuthority(this),
@@ -496,7 +481,7 @@ public class Plugin extends Aware_Plugin implements
         //Removing existing values
         removeValues();
 
-        Aware.setSetting(this, Settings.STATUS_PLUGIN_TEMPLATE, false);
+        Aware.setSetting(this, Settings.STATUS_PLUGIN_MYO, false);
 
         //Stop AWARE instance in plugin
         Aware.stopAWARE(this);

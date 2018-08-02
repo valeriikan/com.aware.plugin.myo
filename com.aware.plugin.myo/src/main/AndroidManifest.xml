@@ -17,25 +17,26 @@
         <!-- Use a hardcoded label string on the service
         to keep the name of the original plugin if added as a library to another -->
         <service
-            android:name=".Plugin"
+            android:name="com.aware.plugin.myo.Plugin"
             android:exported="true"
-            android:label="AWARE: Plugin Template" />
+            android:label="AWARE: Plugin Myo" />
 
         <activity
-            android:name=".Settings"
+            android:name="com.aware.plugin.myo.Settings"
             android:exported="true" />
 
         <!-- Keep the ${applicationId} so there are no conflicts when merging this plugin as a library for reuse. Update the plugin_template string in values -->
         <provider
-            android:name=".Provider"
-            android:authorities="${applicationId}.provider.xxx"
+            android:name="com.aware.plugin.myo.Provider"
+            android:authorities="${applicationId}.provider.myo"
             android:exported="true"
-            android:label="@string/plugin_template"
+            android:label="@string/plugin_myo"
             android:readPermission="com.aware.READ_CONTEXT_DATA"
+            android:syncable="true"
             android:writePermission="com.aware.WRITE_CONTEXT_DATA" />
 
         <service
-            android:name=".syncadapters.Template_Sync"
+            android:name="com.aware.plugin.myo.syncadapters.Myo_Sync"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.content.SyncAdapter" />
@@ -43,12 +44,13 @@
 
             <meta-data
                 android:name="android.content.SyncAdapter"
-                android:resource="@xml/sync_template" />
+                android:resource="@xml/sync_myo" />
         </service>
 
-        <activity android:name=".DialogActivity"
+        <activity
+            android:name=".DialogActivity"
             android:label="Connect via MAC"
-            android:theme="@android:style/Theme.DeviceDefault.Dialog"
-            android:launchMode="singleInstance"></activity>
+            android:launchMode="singleInstance"
+            android:theme="@android:style/Theme.DeviceDefault.Dialog" />
     </application>
 </manifest>

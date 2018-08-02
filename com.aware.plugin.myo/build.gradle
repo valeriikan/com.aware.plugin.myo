@@ -10,6 +10,8 @@ android {
         targetSdkVersion target_sdk
         versionCode version_code
         versionName version_readable
+
+        resValue "string", "provider_myo", android.defaultConfig.applicationId + ".provider.myo"
     }
 
     signingConfigs {
