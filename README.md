@@ -1,7 +1,7 @@
 AWARE Plugin: Myo
 ==========================
 
-This plugin allows to collect the data from a Myo armband: IMU (acceleroeter, gyroscope, orientation) and EMG.
+This plugin allows to collect the data from a Myo armband: IMU (accelerometer, gyroscope, orientation) and EMG.
 
 The plugin does not have UI context card, all the control functionalities are handled via notification.
 
@@ -15,7 +15,7 @@ Parameters adjustable on the dashboard and client:
 - **status_plugin_myo**: (boolean) activate/deactivate plugin
 
 # Providers
-##  Template Data
+##  Myo Data
 > content://com.aware.plugin.myo.provider.myo/plugin_myo
 
 Field | Type | Description
