@@ -13,12 +13,10 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SyncRequest;
 import android.os.Bundle;
-import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.support.v4.app.NotificationCompat;
 import android.support.v4.app.RemoteInput;
-import android.util.Log;
 
 import com.aware.Aware;
 import com.aware.Aware_Preferences;
@@ -28,9 +26,6 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
 import java.util.List;
 
 import eu.darken.myolib.BaseMyo;
@@ -71,7 +66,7 @@ public class Plugin extends Aware_Plugin implements
     private BluetoothDevice bt;
 
     // JSON objects variables
-    private JSONObject myoDataObject, batteryObj;
+    private JSONObject myoDataObject;
     private JSONArray accArray, gyroArray, orientArray, emgArray, batteryArray;
 
     // Sampling frequency and connection variables
@@ -82,13 +77,11 @@ public class Plugin extends Aware_Plugin implements
     private static final int CONNECTION_TIMEOUT = 100000;                 // in milliseconds (e.g. 100 sec)
     private static final int NOTIFICATION_ID = 1;
 
-    private static final String MYO_TAG = "MYO_TAG";
-    public static final String MYO_MAC_ADDRESS = "MYO_MAC_ADDRESS";
-
     // Broadcast receiver flags
     private static final String INTENT_CONNECT = "CONNECT";
-    public static final String INTENT_CONNECT_MAC = "CONNECT_MAC";
     private static final String INTENT_DISCONNECT = "DISCONNECT";
+    public static final String INTENT_CONNECT_MAC = "CONNECT_MAC";
+    public static final String MYO_MAC_ADDRESS = "MYO_MAC_ADDRESS";
 
     // Sampling keys for JSON handling
     private static final String SAMPLE_KEY_TIMESTAMP = "timestamp";
@@ -104,12 +97,12 @@ public class Plugin extends Aware_Plugin implements
     private static final String SAMPLE_KEY_EMG_6 = "emg6";
     private static final String SAMPLE_KEY_EMG_7 = "emg7";
     private static final String SAMPLE_KEY_BATTERY_LEVEL = "battery_level";
+    private static final String SAMPLE_KEY_BATTERY = "battery";
     private static final String SAMPLE_KEY_MAC_ADDRESS = "mac";
     private static final String SAMPLE_KEY_LABEL = "label";
-    private static final String SAMPLE_KEY_BATTERY = "battery";
+    private static final String SAMPLE_KEY_MYO_DATA = "myo_data";
     private static final String SAMPLE_KEY_IMU = "IMU";
     private static final String SAMPLE_KEY_EMG = "EMG";
-    private static final String SAMPLE_KEY_MYO_DATA = "myo_data";
     private static final String SAMPLE_KEY_ACCELEROMETER = "accelerometer";
     private static final String SAMPLE_KEY_GYROSCOPE = "gyroscope";
     private static final String SAMPLE_KEY_ORIENTATION = "orientation";
@@ -155,7 +148,7 @@ public class Plugin extends Aware_Plugin implements
             connectMac = new NotificationCompat.Action.Builder
                     (0, getString(R.string.notification_action_connect_mac), connectMacIntent)
                     .addRemoteInput(new RemoteInput.Builder(MYO_MAC_ADDRESS)
-                        .setLabel(getString(R.string.type_mac))
+                        .setLabel(getString(R.string.notification_type_mac_hint))
                         .build())
                     .build();
         } else {
@@ -170,17 +163,12 @@ public class Plugin extends Aware_Plugin implements
             notifyReceiver = new BroadcastReceiver() {
                 @Override
                 public void onReceive(Context context, Intent intent) {
-                    Log.d(MYO_TAG, "BROADCAST RECEIVED: ");
 
                     if (!connected && intent.getAction().equals(INTENT_CONNECT)) {
-                        Log.d(MYO_TAG, "BROADCAST: CONNECT");
-
                         connectMyo();
                     }
 
                     if (!connected && intent.getAction().equals(INTENT_CONNECT_MAC)) {
-                        Log.d(MYO_TAG, "BROADCAST: CONNECT VIA MAC");
-
                         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
                             String mac = RemoteInput.getResultsFromIntent(intent).getCharSequence(MYO_MAC_ADDRESS).toString();
                             connectMacMyo(mac);
@@ -192,8 +180,6 @@ public class Plugin extends Aware_Plugin implements
                     }
 
                     if (connected && intent.getAction().equals(INTENT_DISCONNECT)) {
-                        Log.d(MYO_TAG, "BROADCAST: DISCONNECT");
-
                         disconnectMyo();
                     }
                 }
@@ -228,18 +214,14 @@ public class Plugin extends Aware_Plugin implements
         orientArray = new JSONArray();
         emgArray = new JSONArray();
         batteryArray = new JSONArray();
-        batteryObj = new JSONObject();
 
         // Myo scanner callback initialization
         mScannerCallback = new MyoConnector.ScannerCallback() {
             @Override
             public void onScanFinished(List<Myo> myos) {
-                Log.d(MYO_TAG, "Found " + myos.size() + " Myo: " + myos.toString());
-
                 // offer either to scan again or to connect straight wih MAC if no Myos were found
                 if (myos.size() == 0) {
-                    Log.d(Plugin.MYO_TAG, "No adjacent Myos found");
-                    //Remove already exitsting values
+                    //Remove already existing values
                     removeValues();
 
                     // Update notification status
@@ -363,7 +345,8 @@ public class Plugin extends Aware_Plugin implements
                     .mActions.clear();
             startForeground(NOTIFICATION_ID, nBuilder.getNotification());
 
-            // First try to connect with autoscanning
+            // Try to connect with autoscanning
+            // Callback either connects to found myo or offers to try again
             if (connector == null) connector = new MyoConnector(Plugin.this);
             connector.scan(10000, mScannerCallback);
         }
@@ -387,8 +370,7 @@ public class Plugin extends Aware_Plugin implements
             startForeground(NOTIFICATION_ID, nBuilder.getNotification());
 
             try {
-                // Inintialize bluetooth device with retrieved MAC address
-                // "C4:EF:50:4D:29:BD"
+                // Initialize bluetooth device with retrieved MAC address
                 bt = bluetoothAdapter.getRemoteDevice(mac);
 
                 // Connect to it
@@ -401,6 +383,7 @@ public class Plugin extends Aware_Plugin implements
                 final Runnable r = new Runnable() {
                     public void run() {
                         if (myo!=null && !connected) {
+                            //Update notification status
                             nBuilder.setContentText(getString(R.string.notification_state_connection_error))
                                     .setProgress(0,0,false)
                                     .mActions.clear();
@@ -428,7 +411,6 @@ public class Plugin extends Aware_Plugin implements
                 //Removing existing values
                 removeValues();
             }
-
         }
     }
 
@@ -437,24 +419,17 @@ public class Plugin extends Aware_Plugin implements
         if (myo != null) {
             //Applying settings to disconnected Myo
             myo.setConnectionSpeed(BaseMyo.ConnectionSpeed.BALANCED);
-            myo.writeSleepMode(MyoCmds.SleepMode.NORMAL, new Myo.MyoCommandCallback() {
-                @Override
-                public void onCommandDone(Myo myo, MyoMsg msg) {
-                    Log.d(MYO_TAG, "Sleep mode: -");
-                }
-            });
+            myo.writeSleepMode(MyoCmds.SleepMode.NORMAL, null);
             myo.writeMode(MyoCmds.EmgMode.NONE, MyoCmds.ImuMode.NONE, MyoCmds.ClassifierMode.DISABLED, new Myo.MyoCommandCallback() {
                 @Override
                 public void onCommandDone(Myo myo, MyoMsg msg) {
-                    Log.d(MYO_TAG, "EMG and Imu: -");
-
                     // Disconnecting from Myo and aplying UI changes
-                    Log.d(MYO_TAG, "Disconnected");
                     myo.disconnect();
 
                     //Removing existing values
                     removeValues();
 
+                    // Update notification status
                     nBuilder.setContentText(getString(R.string.notification_state_disconnected))
                             .setStyle(new NotificationCompat.BigTextStyle().bigText(getString(R.string.notification_state_disconnected)))
                             .setProgress(0,0,false)
@@ -463,14 +438,13 @@ public class Plugin extends Aware_Plugin implements
                     startForeground(NOTIFICATION_ID, nBuilder.getNotification());
                     nBuilder.setStyle(null);
 
-                    // Insert existing data on disconnect is smth not inserted exists
+                    // Insert existing data on disconnect if smth not inserted exists
                     if (accArray.length()!=0 || gyroArray.length()!=0 || orientArray.length()!=0 || emgArray.length()!=0) {
                         // Insert data to db; Handler for getting access to AWARE from the Myo callback
                         Handler handler = new Handler(Looper.getMainLooper());
                         Runnable r = new Runnable() {
                             public void run() {
                                 insertData();
-                                Log.d(MYO_TAG, "RECORDED FROM DISCONNECT");
                             }
                         };
                         handler.postDelayed(r, 0);
@@ -483,6 +457,7 @@ public class Plugin extends Aware_Plugin implements
     // Inset data to db once the EMG array length equals to variable SAMPLE_BUFFER_SIZE
     private void insertData() {
         try {
+            // Building JSON object
             myoDataObject.put(SAMPLE_KEY_BATTERY, batteryArray);
 
             JSONObject imuObject = new JSONObject();
@@ -495,44 +470,24 @@ public class Plugin extends Aware_Plugin implements
             result.put(SAMPLE_KEY_IMU, imuObject);
             result.put(SAMPLE_KEY_EMG, emgArray);
 
+            // Inserting to db
             ContentValues values = new ContentValues();
             values.put(Provider.Myo_Data.TIMESTAMP, System.currentTimeMillis());
             values.put(Provider.Myo_Data.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
             values.put(Provider.Myo_Data.MYO_DATA, result.toString());
             getApplicationContext().getContentResolver().insert(Provider.Myo_Data.CONTENT_URI, values);
 
-
-            // Recording result to local .txt file
-            // for testing only
-            File root = new File(Environment.getExternalStorageDirectory().toString());
-            Long tsLong = System.currentTimeMillis()/1000;
-            String ts = tsLong.toString();
-            File gpxfile = new File(root, "samples" + ts +".txt");
-            FileWriter writer = null;
-            try {
-                writer = new FileWriter(gpxfile);
-                writer.append(result.toString());
-                writer.flush();
-                writer.close();
-                Log.d(MYO_TAG, "DATA RECORDED: " + emgArray.length());
-            } catch (IOException e) {
-                e.printStackTrace();
-                Log.d(MYO_TAG, "Logging not done");
-                Log.d(MYO_TAG, e.getMessage());
-            }
-
+            // Empty sampling arrays for further data collection
             accArray = new JSONArray();
             gyroArray = new JSONArray();
             orientArray = new JSONArray();
             emgArray = new JSONArray();
             batteryArray = new JSONArray();
 
-
         } catch (JSONException e) {
             e.printStackTrace();
         }
     }
-
 
     // Removing values when Myo is detached
     private void removeValues() {
@@ -561,51 +516,25 @@ public class Plugin extends Aware_Plugin implements
     public void onConnectionStateChanged(final BaseMyo baseMyo, BaseMyo.ConnectionState state) {
 
         if (state == BaseMyo.ConnectionState.CONNECTED) {
-            Log.d(MYO_TAG, "STATE CONNECTED");
 
-            // Applying settings to connected Myo
-            // First run does not work
-            Myo.MyoCommandCallback callbackSleep = new Myo.MyoCommandCallback() {
-                @Override
-                public void onCommandDone(Myo myo, MyoMsg msg) {
-                    Log.d(MYO_TAG, "Test Sleep applied");
-                }
-            };
-
-            Myo.MyoCommandCallback callbackUnlock = new Myo.MyoCommandCallback() {
-                @Override
-                public void onCommandDone(Myo myo, MyoMsg msg) {
-                    Log.d(MYO_TAG, "Test Unlock applied");
-                }
-            };
-
-            Myo.MyoCommandCallback callbackWrite = new Myo.MyoCommandCallback() {
-                @Override
-                public void onCommandDone(Myo myo, MyoMsg msg) {
-                    Log.d(MYO_TAG, "Test WriteMode applied");
-                }
-            };
+            /* Applying settings to connected Myo
+               First set does not make changes
+               Do not remove that, since the second set will not be applied */
             myo.setConnectionSpeed(BaseMyo.ConnectionSpeed.HIGH);
             myo.setConnectionSpeed(BaseMyo.ConnectionSpeed.HIGH);
-            myo.writeSleepMode(MyoCmds.SleepMode.NEVER,callbackSleep);
-            myo.writeSleepMode(MyoCmds.SleepMode.NEVER,callbackSleep);
-            myo.writeUnlock(MyoCmds.UnlockType.HOLD, callbackUnlock);
-            myo.writeUnlock(MyoCmds.UnlockType.HOLD, callbackUnlock);
-            myo.writeMode(MyoCmds.EmgMode.FILTERED, MyoCmds.ImuMode.RAW, MyoCmds.ClassifierMode.DISABLED,callbackWrite);
-            myo.writeMode(MyoCmds.EmgMode.FILTERED, MyoCmds.ImuMode.RAW, MyoCmds.ClassifierMode.DISABLED,callbackWrite);
+            myo.writeSleepMode(MyoCmds.SleepMode.NEVER, null);
+            myo.writeSleepMode(MyoCmds.SleepMode.NEVER, null);
+            myo.writeUnlock(MyoCmds.UnlockType.HOLD, null);
+            myo.writeUnlock(MyoCmds.UnlockType.HOLD, null);
+            myo.writeMode(MyoCmds.EmgMode.FILTERED, MyoCmds.ImuMode.RAW, MyoCmds.ClassifierMode.DISABLED, null);
+            myo.writeMode(MyoCmds.EmgMode.FILTERED, MyoCmds.ImuMode.RAW, MyoCmds.ClassifierMode.DISABLED, null);
 
-            // Second run makes actual changes
+            // Second set makes actual changes
             myo.setConnectionSpeed(BaseMyo.ConnectionSpeed.HIGH);
-            myo.writeSleepMode(MyoCmds.SleepMode.NEVER, new Myo.MyoCommandCallback() {
-                @Override
-                public void onCommandDone(Myo myo, MyoMsg msg) {
-                    Log.d(MYO_TAG, "Sleep mode: +");
-                }
-            });
+            myo.writeSleepMode(MyoCmds.SleepMode.NEVER, null);
             myo.writeUnlock(MyoCmds.UnlockType.HOLD, new Myo.MyoCommandCallback() {
                 @Override
                 public void onCommandDone(Myo myo, MyoMsg msg) {
-                    Log.d(MYO_TAG, "Unlock: +");
                     myo.writeVibrate(MyoCmds.VibrateType.LONG, null);
                 }
             });
@@ -613,7 +542,6 @@ public class Plugin extends Aware_Plugin implements
                 @Override
                 public void onCommandDone(Myo mMyo, MyoMsg msg) {
                     // Setting up Imu and EMG sensors
-                    Log.d(MYO_TAG, "EMG and Imu: +");
                     imuProcessor = new ImuProcessor();
                     emgProcessor = new EmgProcessor();
                     imuProcessor.addListener(Plugin.this);
@@ -629,6 +557,7 @@ public class Plugin extends Aware_Plugin implements
                     startForeground(NOTIFICATION_ID, nBuilder.getNotification());
                     connected = true;
 
+                    // Read device name on connect and record it to JSON object
                     myo.readDeviceName(Plugin.this);
                     try {
                         myoDataObject.put(SAMPLE_KEY_MAC_ADDRESS, myo.getDeviceAddress());;
@@ -640,11 +569,10 @@ public class Plugin extends Aware_Plugin implements
         }
 
         if (state == BaseMyo.ConnectionState.DISCONNECTED) {
-            Log.d(MYO_TAG, "STATE DISCONNECTED");
-            Log.d(MYO_TAG, "Disconnected from Myo: " + baseMyo.toString());
-            //Removing existing values
+            // Removing existing values
             removeValues();
 
+            // Update notification status
             nBuilder.setContentText(getString(R.string.notification_state_disconnected))
                     .setStyle(new NotificationCompat.BigTextStyle().bigText(getString(R.string.notification_state_disconnected)))
                     .setProgress(0,0,false)
@@ -656,17 +584,15 @@ public class Plugin extends Aware_Plugin implements
             // Insert existing data on disconnect if smth not inserted exists
             if (accArray.length()!=0 || gyroArray.length()!=0 || orientArray.length()!=0 || emgArray.length()!=0) {
                 insertData();
-                Log.d(MYO_TAG, "RECORDED FROM DISCONNECT callback");
             }
         }
-
     }
-
 
     //Myo device name reader
     @Override
     public void onDeviceNameRead(Myo myo, MyoMsg msg, String deviceName) {
         try {
+            // Insert device name to JSON when read is executed
             myoDataObject.put(SAMPLE_KEY_LABEL, deviceName);
         } catch (JSONException e) {
             e.printStackTrace();
@@ -687,13 +613,15 @@ public class Plugin extends Aware_Plugin implements
             nBuilder.setStyle(null);
 
             // Record battery level to JSON object
+            JSONObject batteryObj = new JSONObject();
+            batteryObj.put(SAMPLE_KEY_TIMESTAMP, mLastBatteryUpdate);
             batteryObj.put(SAMPLE_KEY_BATTERY_LEVEL, batteryLevel);
             batteryArray.put(batteryObj);
+            batteryObj = null;
+
         } catch (JSONException e) {
             e.printStackTrace();
         }
-
-        Log.d(MYO_TAG, "LISTENER: BATTERY: " + batteryLevel);
     }
 
     //Myo IMU data (accelerometer, gyroscope, orientation) listener
@@ -735,17 +663,10 @@ public class Plugin extends Aware_Plugin implements
             }
         }
 
-        // Check for battery level every minute
+        // Check for battery level once per minute
         if (System.currentTimeMillis() - mLastBatteryUpdate > SAMPLING_BATTERY_LVL_READ_FREQUENCY) {
             mLastBatteryUpdate = System.currentTimeMillis();
             myo.readBatteryLevel(Plugin.this);
-
-            try {
-                // Record battery sampling timestamp to JSON object
-                batteryObj.put(SAMPLE_KEY_TIMESTAMP, mLastBatteryUpdate);
-            } catch (JSONException e) {
-                e.printStackTrace();
-            }
         }
     }
 

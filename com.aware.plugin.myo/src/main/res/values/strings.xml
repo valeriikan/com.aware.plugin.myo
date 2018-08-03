@@ -2,8 +2,6 @@
     <string name="app_name">AWARE: Myo Plugin</string>
     <string name="plugin_myo">Plugin: Myo</string>
 
-    <string name="type_mac">Type your Myo MAC address here</string>
-
     <string name="notification_title">AWARE: Myo armband</string>
     <string name="notification_state_disconnected">Disconnected.\nSelect options below to connect</string>
     <string name="notification_state_wrong_mac">Wrong MAC address format.\nPlease try again</string>
@@ -17,12 +15,11 @@
     <string name="notification_action_connect">Autoconnect</string>
     <string name="notification_action_connect_mac">Connect via MAC</string>
     <string name="notification_action_disconnect">Disconnect</string>
+    <string name="notification_type_mac_hint">Type your Myo MAC address here</string>
 
     <string name="dialog_title">Connect via MAC</string>
     <string name="dialog_ui_hint">Type your MAC here</string>
     <string name="dialog_ui_submit">Submit</string>
     <string name="dialog_toast_empty_mac">MAC address cannot be empty</string>
-
-
 
 </resources>
