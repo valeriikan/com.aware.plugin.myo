@@ -2,9 +2,7 @@ package com.aware.plugin.myo;
 
 import android.app.Activity;
 import android.content.Intent;
-import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
-import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
@@ -23,11 +21,10 @@ public class DialogActivity extends Activity {
         button.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                //finish();
 
                 String mac = editText.getText().toString();
                 if (mac.equals("")) {
-                    Toast.makeText(DialogActivity.this, "MAC cannot be empty", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(DialogActivity.this, R.string.dialog_toast_empty_mac, Toast.LENGTH_SHORT).show();
 
                 } else {
                     Intent intent = new Intent(Plugin.INTENT_CONNECT_MAC);

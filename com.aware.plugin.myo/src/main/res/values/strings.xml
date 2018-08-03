@@ -6,6 +6,7 @@
 
     <string name="notification_title">AWARE: Myo armband</string>
     <string name="notification_state_disconnected">Disconnected.\nSelect options below to connect</string>
+    <string name="notification_state_wrong_mac">Wrong MAC address format.\nPlease try again</string>
     <string name="notification_state_connection_error">Connection error. Please try again</string>
     <string name="notification_state_connecting">Connecting…</string>
     <string name="notification_state_connected">Connected. Data collection is active</string>
@@ -16,5 +17,12 @@
     <string name="notification_action_connect">Autoconnect</string>
     <string name="notification_action_connect_mac">Connect via MAC</string>
     <string name="notification_action_disconnect">Disconnect</string>
+
+    <string name="dialog_title">Connect via MAC</string>
+    <string name="dialog_ui_hint">Type your MAC here</string>
+    <string name="dialog_ui_submit">Submit</string>
+    <string name="dialog_toast_empty_mac">MAC address cannot be empty</string>
+
+
 
 </resources>

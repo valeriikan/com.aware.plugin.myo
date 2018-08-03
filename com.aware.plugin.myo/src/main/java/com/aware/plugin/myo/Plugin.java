@@ -386,32 +386,49 @@ public class Plugin extends Aware_Plugin implements
                     .mActions.clear();
             startForeground(NOTIFICATION_ID, nBuilder.getNotification());
 
-            // Inintialize bluetooth device with retrieved MAC address
-            // "C4:EF:50:4D:29:BD"
-            bt = bluetoothAdapter.getRemoteDevice(mac);
+            try {
+                // Inintialize bluetooth device with retrieved MAC address
+                // "C4:EF:50:4D:29:BD"
+                bt = bluetoothAdapter.getRemoteDevice(mac);
 
-            // Connect to it
-            myo = new Myo(getApplicationContext(), bt);
-            myo.addConnectionListener(Plugin.this);
-            myo.connect();
+                // Connect to it
+                myo = new Myo(getApplicationContext(), bt);
+                myo.addConnectionListener(Plugin.this);
+                myo.connect();
 
-            // Remove values and set notification to default state if not connected after 100 seconds
-            final Handler handler = new Handler();
-            final Runnable r = new Runnable() {
-                public void run() {
-                    if (myo!=null && !connected) {
-                        nBuilder.setContentText(getString(R.string.notification_state_connection_error))
-                                .setProgress(0,0,false)
-                                .mActions.clear();
-                        nBuilder.addAction(0, getString(R.string.notification_action_connect), connectIntent).addAction(connectMac);
-                        startForeground(NOTIFICATION_ID, nBuilder.getNotification());
+                // Remove values and set notification to default state if not connected after 100 seconds
+                final Handler handler = new Handler();
+                final Runnable r = new Runnable() {
+                    public void run() {
+                        if (myo!=null && !connected) {
+                            nBuilder.setContentText(getString(R.string.notification_state_connection_error))
+                                    .setProgress(0,0,false)
+                                    .mActions.clear();
+                            nBuilder.addAction(0, getString(R.string.notification_action_connect), connectIntent).addAction(connectMac);
+                            startForeground(NOTIFICATION_ID, nBuilder.getNotification());
 
-                        //Removing existing values
-                        removeValues();
+                            //Removing existing values
+                            removeValues();
+                        }
                     }
-                }
-            };
-            handler.postDelayed(r, CONNECTION_TIMEOUT);
+                };
+                handler.postDelayed(r, CONNECTION_TIMEOUT);
+
+            } catch (IllegalArgumentException e) {
+
+                //Reset state to disconnected state because of wrong MAC address format
+                nBuilder.setContentText(getString(R.string.notification_state_wrong_mac))
+                        .setStyle(new NotificationCompat.BigTextStyle().bigText(getString(R.string.notification_state_wrong_mac)))
+                        .setProgress(0,0,false)
+                        .mActions.clear();
+                nBuilder.addAction(0, getString(R.string.notification_action_connect),connectIntent).addAction(connectMac);
+                startForeground(NOTIFICATION_ID, nBuilder.getNotification());
+                nBuilder.setStyle(null);
+
+                //Removing existing values
+                removeValues();
+            }
+
         }
     }
 
